@@ -8,6 +8,7 @@ using AllegroFee.Models;
 using AllegroFee.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Attribute = AllegroFee.Models.Attribute;
 
 namespace YourProject.Controllers
@@ -90,8 +91,6 @@ namespace YourProject.Controllers
             };
         }
 
-
-
         [HttpGet("{productId}")]
         public async Task<IActionResult> GetProduct(string productId)
         {
@@ -114,63 +113,67 @@ namespace YourProject.Controllers
             }
         }
 
-        
-        [HttpGet("{productId}/sales")]
-        public async Task<IActionResult> GetSales(string productId)
+        [HttpGet("user-products")]
+        public async Task<IActionResult> GetUserProducts()
         {
-            var requestUrl = $"{AllegroApiBaseUrl}/sale/demand?offerId={productId}&period=365";
-            var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-            request.Headers.Add("Authorization", $"Bearer {YOUR_ACCESS_TOKEN}");
+            try
+            {
+                var userDetails = await GetCurrentUserDetailsAsync();
+                string userId = userDetails["id"].ToString();
+
+                string apiUrl = $"https://api.allegro.pl.allegrosandbox.pl/sale/user-offers?user.id={userId}";
+
+                var response = await GetUserProductsResponseAsync(apiUrl);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return NotFound();
+                }
+
+                var userProductsResponse = await HandleUserProductsResponse(response);
+
+                return Ok(userProductsResponse);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        private async Task<HttpResponseMessage> GetUserProductsResponseAsync(string apiUrl)
+        {
+            var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
+            var request = CreateAllegroApiRequest(apiUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            return await SendAllegroApiRequest(request);
+        }
+
+        private async Task<IEnumerable<PartialProductResponse>> HandleUserProductsResponse(HttpResponseMessage response)
+        {
+            var responseString = await response.Content.ReadAsStringAsync();
+            var userProducts = DeserializeJson<IEnumerable<PartialProductResponse>>(responseString);
+
+            return userProducts;
+        }
+
+        private async Task<JObject> GetCurrentUserDetailsAsync()
+        {
+            var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
+            var request = CreateAllegroApiRequest("me");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
             var response = await SendAllegroApiRequest(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return NotFound();
-            }
+            response.EnsureSuccessStatusCode();
 
             var responseString = await response.Content.ReadAsStringAsync();
-            var sales = DeserializeSalesResponse(responseString);
+            var userDetails = JObject.Parse(responseString);
 
-            return Ok(sales);
-        }
-        
-        [HttpGet("transactions/{productId}")]
-        public async Task<IActionResult> GetTransactions(string productId)
-        {
-            var requestUrl = $"{AllegroApiBaseUrl}/sale/demand?offerId={productId}&period=365";
-            var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-            request.Headers.Add("Authorization", $"Bearer {YOUR_ACCESS_TOKEN}");
-
-            var response = await SendAllegroApiRequest(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return NotFound();
-            }
-
-            var responseString = await response.Content.ReadAsStringAsync();
-            var sales = DeserializeSalesResponse(responseString);
-
-            return Ok(sales);
-        }
-        
-        private List<Sale>? DeserializeSalesResponse(string responseString)
-        {
-            var salesResponse = JsonConvert.DeserializeObject<SalesResponse>(responseString);
-            if (salesResponse == null || salesResponse.Sales == null)
-            {
-                return null;
-            }
-            return salesResponse.Sales.Select(s => new Sale
-            {
-                Date = s.Date,
-                Quantity = s.Quantity
-            }).ToList();
+            return userDetails;
         }
 
         #region Methods
-private async Task<HttpResponseMessage> GetProductResponseAsync(string productId)
+        private async Task<HttpResponseMessage> GetProductResponseAsync(string productId)
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
             var request = CreateAllegroApiRequest($"sale/offers/{productId}");
@@ -227,39 +230,27 @@ private async Task<HttpResponseMessage> GetProductResponseAsync(string productId
                 Ean = productResponse.Ean
             };
         }
-        private decimal GetDiscountForPromotions(List<Promotion> promotions, decimal totalValue)
-        {
-            decimal discount = 0m;
-            foreach (var promotion in promotions)
-            {
-                switch (promotion.Type)
-                {
-                    case PromotionType.PercentageDiscount:
-                        discount += totalValue * (promotion.Amount / 100m);
-                        break;
-                    case PromotionType.FixedDiscount:
-                        discount += Math.Min(promotion.Amount, totalValue);
-                        break;
-                    case PromotionType.FreeDelivery:
-                        discount += promotion.Amount;
-                        break;
-                    default:
-                        break;
-                }
-            }
-            return discount;
-        }
 
         #endregion
 
         
 
     }
-    public class PartialProductResponse
-    {
-        [JsonProperty("id")]
-        public string ProductId { get; set; }
-        public string Name { get; set; }
-        public Category Category { get; set; }
-    }
+public class PartialProductResponse
+{
+    [JsonProperty("id")]
+    public string ProductId { get; set; }
+    public string Name { get; set; }
+    public Category Category { get; set; }
+    [JsonProperty("images")]
+    public List<Image> Images { get; set; }
+    [JsonProperty("sellingMode")]
+    public SellingMode SellingMode { get; set; }
+    [JsonProperty("tax")]
+    public Tax Tax { get; set; }
+    [JsonProperty("stock")]
+    public Stock Stock { get; set; }
+    [JsonProperty("promotion")]
+    public Promotion Promotion { get; set; }
+}
 }

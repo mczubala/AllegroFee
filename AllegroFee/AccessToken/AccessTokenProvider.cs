@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -16,6 +17,7 @@ public class AccessTokenProvider : IAccessTokenProvider
     private readonly string _redirectUri = "http://localhost:8000";
     private string _accessToken;
     private DateTime _accessTokenExpiration;
+    private readonly string _tokenFileName = "access_token.json";
 
     public AccessTokenProvider(HttpClient httpClient, string clientId, string clientSecret, string tokenUrl,
         string authorizationEndpoint)
@@ -57,7 +59,14 @@ public class AccessTokenProvider : IAccessTokenProvider
     {
         if (_accessToken != null && DateTime.UtcNow < _accessTokenExpiration)
         {
-            return _accessToken;
+            (string accessToken, DateTime expirationTime) = await LoadAccessTokenFromFileAsync();
+
+            if (accessToken != null && DateTime.UtcNow < expirationTime)
+            {
+                _accessToken = accessToken;
+                _accessTokenExpiration = expirationTime;
+                return _accessToken;
+            }
         }
         string codeVerifier = GenerateCodeVerifier();
         string codeChallenge = GenerateCodeChallenge(codeVerifier);
@@ -90,7 +99,7 @@ public class AccessTokenProvider : IAccessTokenProvider
         _accessToken = jsonResponse["access_token"].ToString();
         int expiresIn = jsonResponse["expires_in"].ToObject<int>();
         _accessTokenExpiration = DateTime.UtcNow.AddSeconds(expiresIn);
-
+        await SaveAccessTokenToFileAsync(_accessToken, _accessTokenExpiration);
         return _accessToken;
     }
 
@@ -116,173 +125,37 @@ public class AccessTokenProvider : IAccessTokenProvider
         return Convert.ToBase64String(input).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
-    // public async Task<string> GetAccessTokenForUserAsync()
-    // {
-    //     // Authorization endpoint for user authentication
-    //     var authorizationEndpoint = _authorizationEndpoint;
-    //
-    //     // Token endpoint to exchange authorization code for an access token
-    //     var tokenEndpoint = _tokenUrl;
-    //
-    //     // Your client ID and secret obtained from the Allegro Developer Dashboard
-    //     var clientId = _clientId;
-    //     var clientSecret = _clientSecret;
-    //
-    //     // The redirect URI for your application to receive the authorization code
-    //     var redirectUri = "http://localhost:8000";
-    //
-    //     // The scope of the access being requested
-    //     var scope = "allegro:api:sale:offers:read";
-    //
-    //     // Create a new HttpClient to send requests to the authorization and token endpoints
-    //     var httpClient = new HttpClient();
-    //
-    //     // Create a new HttpRequestMessage to send an authorization request to the authorization endpoint
-    //     var authorizationRequest = new HttpRequestMessage(HttpMethod.Get, authorizationEndpoint + "?response_type=code" +
-    //                                                                       $"&client_id={clientId}&redirect_uri={redirectUri}&scope={scope}");
-    //     // Send the authorization request to the authorization endpoint
-    //     var authorizationResponse = await httpClient.SendAsync(authorizationRequest);
-    //     
-    //     // If the response status code is not OK, something went wrong and the user cannot be authorized
-    //     if (!authorizationResponse.IsSuccessStatusCode)
-    //     {
-    //         //throw new Exception("Failed to authorize user.");
-    //     }
-    //     
-    //     // Read the authorization response content to get the authorization code from the query string
-    //     var authorizationResponseContent = await authorizationResponse.Content.ReadAsStringAsync();
-    //     var authorizationCode = HttpUtility.ParseQueryString(authorizationResponseContent)["code"];
-    //
-    //     // Create a new HttpRequestMessage to send a token request to the token endpoint
-    //     var tokenRequest = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
-    //     tokenRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
-    //     {
-    //         { "grant_type", "authorization_code" },
-    //         { "code", authorizationCode },
-    //         { "redirect_uri", redirectUri }
-    //     });
-    //
-    //     // Set the Basic authentication header with the client ID and secret
-    //     var authHeader = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}")));
-    //     tokenRequest.Headers.Authorization = authHeader;
-    //
-    //     // Send the token request to the token endpoint
-    //     var tokenResponse = await httpClient.SendAsync(tokenRequest);
-    //
-    //     // If the response status code is not OK, something went wrong and the access token cannot be obtained
-    //     if (!tokenResponse.IsSuccessStatusCode)
-    //     {
-    //         throw new Exception("Failed to get access token.");
-    //     }
-    //
-    //     // Read the token response content to get the access token
-    //     var tokenResponseContent = await tokenResponse.Content.ReadAsStringAsync();
-    //     var tokenData = JsonConvert.DeserializeObject<AccessTokenData>(tokenResponseContent);
-    //
-    //     return tokenData.AccessToken;
-    // }
-
-    public async Task<string> GetAccessTokenUsingDeviceFlowAsync()
+    private async Task SaveAccessTokenToFileAsync(string accessToken, DateTime expirationTime)
     {
-        // Device flow endpoint to obtain device flow code
-        var deviceFlowEndpoint = "https://allegro.pl.allegrosandbox.pl/auth/oauth/device";
-
-        // Token endpoint to exchange device flow code for an access token
-        var tokenEndpoint = _tokenUrl;
-
-        // Your client ID obtained from the Allegro Developer Dashboard
-        var clientId = _clientId;
-        var clientSecret = _clientSecret;
-        // The scope of the access being requested
-        var scope = "allegro:api:sale:offers:read";
-
-        // Create a new HttpClient to send requests to the device flow and token endpoints
-        var httpClient = new HttpClient();
-
-        // Create a new HttpRequestMessage to send a device flow request to the device flow endpoint
-        var deviceFlowRequest = new HttpRequestMessage(HttpMethod.Post, deviceFlowEndpoint);
-
-        // Set the Authorization header with the client ID and secret
-        var authHeader = new AuthenticationHeaderValue("Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}")));
-        deviceFlowRequest.Headers.Authorization = authHeader;
-
-        // Set the Content-Type header
-        deviceFlowRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var data = new Dictionary<string, string>
         {
-            { "client_id", clientId },
-            { "scope", scope }
-        });
-        deviceFlowRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-www-form-urlencoded");
+            { "accessToken", accessToken },
+            { "expirationTime", expirationTime.ToString("o") }
+        };
+        string json = JsonConvert.SerializeObject(data);
 
-        // Send the device flow request to the device flow endpoint
-        var deviceFlowResponse = await httpClient.SendAsync(deviceFlowRequest);
-
-        // If the response status code is not OK, something went wrong and the device code cannot be obtained
-        if (!deviceFlowResponse.IsSuccessStatusCode)
-        {
-            throw new Exception("Failed to obtain device code.");
-        }
-
-        // Read the device flow response content to get the device code and verification URL
-        var deviceFlowResponseContent = await deviceFlowResponse.Content.ReadAsStringAsync();
-        var deviceFlowData = JsonConvert.DeserializeObject<DeviceFlowData>(deviceFlowResponseContent);
-
-        // Display the verification URL and user code to the user
-        Console.WriteLine(
-            $"Please visit {deviceFlowData.VerificationUri} and enter the code {deviceFlowData.UserCode}");
-
-        // Poll the token endpoint until an access token is obtained
-        var accessToken = string.Empty;
-        var interval = deviceFlowData.Interval;
-
-        while (accessToken == string.Empty)
-        {
-            // Wait for the specified interval before polling again
-            await Task.Delay(interval * 1000);
-
-            // Create a new HttpRequestMessage to send a token request to the token endpoint
-            var tokenRequest = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
-            tokenRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                { "grant_type", "urn:ietf:params:oauth:grant-type:device_code" },
-                { "device_code", deviceFlowData.DeviceCode }
-            });
-
-            // Set the Basic authentication header with the client ID and secret
-            tokenRequest.Headers.Authorization = authHeader;
-
-            // Send the token request to the token endpoint
-            var tokenResponse = await httpClient.SendAsync(tokenRequest);
-
-            // If the response status code is not OK, something went wrong and the access token cannot be obtained
-            if (!tokenResponse.IsSuccessStatusCode)
-            {
-                // If the response status code is 400 (Bad Request) and the error is "authorization_pending", continue polling
-                if (tokenResponse.StatusCode == HttpStatusCode.BadRequest)
-                {
-                    var tokenResponseContent = await tokenResponse.Content.ReadAsStringAsync();
-                    var tokenErrorData = JsonConvert.DeserializeObject<TokenErrorData>(tokenResponseContent);
-
-                    if (tokenErrorData.Error == "authorization_pending")
-                    {
-                        continue;
-                    }
-                }
-
-                throw new Exception("Failed to get access token.");
-            }
-
-
-            // Read the token response content to get the access token
-            var tokenResponseContent2 = await tokenResponse.Content.ReadAsStringAsync();
-            var tokenData = JsonConvert.DeserializeObject<AccessTokenData>(tokenResponseContent2);
-
-            return tokenData.AccessToken;
-        }
-
-        return string.Empty;
+        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AccessToken.json");
+        await File.WriteAllTextAsync(filePath, json);
     }
+    
+    private async Task<(string accessToken, DateTime expirationTime)> LoadAccessTokenFromFileAsync()
+    {
+        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AccessToken.json");
+
+        if (!File.Exists(filePath))
+        {
+            return (null, DateTime.MinValue);
+        }
+
+        string json = await File.ReadAllTextAsync(filePath);
+        var data = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+
+        string accessToken = data["accessToken"];
+        DateTime expirationTime = DateTime.Parse(data["expirationTime"], null, DateTimeStyles.RoundtripKind);
+
+        return (accessToken, expirationTime);
+    }
+
 
     public class TokenErrorData
     {
