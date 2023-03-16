@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using AllegroFee.Models;
 using AllegroFee.Responses;
@@ -50,13 +51,13 @@ namespace YourProject.Controllers
                 return BadRequest();
             }
         }
-        [HttpGet("categories/{categoryId}")]
+        [HttpGet("category/{categoryId}")]
         public async Task<IActionResult> GetCategory(string categoryId)
         {
             try
             {
                 var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-                var request = CreateAllegroApiRequest($"sale/categories/{categoryId}");
+                var request = CreateAllegroApiRequest($"sale/categories/{categoryId}", accessToken);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
                 var response = await SendAllegroApiRequest(request);
@@ -81,16 +82,35 @@ namespace YourProject.Controllers
                 return BadRequest(ex.Message);
             }
         }
-        
-        private Category CreateCategoryFromResponse(CategoryResponse response)
+        [HttpGet("categories/{categoryId}")]
+        public async Task<IActionResult> GetSellingConditionsForCategoryAsync(string categoryId)
         {
-            return new Category
-            {
-                Id = response.Id,
-                Name = response.Name,
-            };
+            var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
+            using var httpClient = new HttpClient();
+            string relativeUrl = $"sale/categories/{categoryId}/selling-conditions";
+            var request = CreateAllegroApiRequest(relativeUrl, accessToken);
+            var response = await httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            string responseContent = await response.Content.ReadAsStringAsync();
+            return Ok(JObject.Parse(responseContent));
         }
+        [HttpPost("offer-fee-preview")]
+        public async Task<JsonElement> GetOfferFeePreviewAsync(JsonElement offerData)
+        {
+            var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
+            using var httpClient = new HttpClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.allegro.pl.allegrosandbox.pl/pricing/offer-fee-preview");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Add("Accept-Language", "PL");
+            request.Content = new StringContent(JsonConvert.SerializeObject(offerData), Encoding.UTF8, "application/vnd.allegro.public.v1+json");
 
+            var response = await httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            string responseContent = await response.Content.ReadAsStringAsync();
+            return JsonDocument.Parse(responseContent).RootElement;
+        }
+        
         [HttpGet("{productId}")]
         public async Task<IActionResult> GetProduct(string productId)
         {
@@ -106,6 +126,35 @@ namespace YourProject.Controllers
                 var productResponse = await HandleProductResponse(response);
 
                 return Ok(productResponse);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("offer-data/{offerId}")]
+        public async Task<IActionResult> GetOfferDataAsync(string offerId)
+        {
+            try
+            {
+                var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
+                var request = CreateAllegroApiRequest($"sale/offers/{offerId}", accessToken);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await SendAllegroApiRequest(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        return NotFound();
+                    }
+                    return BadRequest($"Failed to get offer data. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
+                }
+
+                var responseString = await response.Content.ReadAsStringAsync();
+                return Ok(JObject.Parse(responseString));
             }
             catch (Exception ex)
             {
@@ -143,7 +192,7 @@ namespace YourProject.Controllers
         private async Task<HttpResponseMessage> GetUserProductsResponseAsync(string apiUrl)
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-            var request = CreateAllegroApiRequest(apiUrl);
+            var request = CreateAllegroApiRequest(apiUrl, accessToken);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
             return await SendAllegroApiRequest(request);
@@ -160,7 +209,7 @@ namespace YourProject.Controllers
         private async Task<JObject> GetCurrentUserDetailsAsync()
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-            var request = CreateAllegroApiRequest("me");
+            var request = CreateAllegroApiRequest("me", accessToken);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
             var response = await SendAllegroApiRequest(request);
@@ -173,10 +222,18 @@ namespace YourProject.Controllers
         }
 
         #region Methods
+        private Category CreateCategoryFromResponse(CategoryResponse response)
+        {
+            return new Category
+            {
+                Id = response.Id,
+                Name = response.Name,
+            };
+        }
         private async Task<HttpResponseMessage> GetProductResponseAsync(string productId)
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-            var request = CreateAllegroApiRequest($"sale/offers/{productId}");
+            var request = CreateAllegroApiRequest($"sale/offers/{productId}", accessToken);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             var response = await SendAllegroApiRequest(request);
             return response;
@@ -190,10 +247,10 @@ namespace YourProject.Controllers
         }
 
 
-        private HttpRequestMessage CreateAllegroApiRequest(string relativeUrl)
+        private HttpRequestMessage CreateAllegroApiRequest(string relativeUrl, string accessToken)
         {
             var request = new HttpRequestMessage(HttpMethod.Get, $"{AllegroApiBaseUrl}/{relativeUrl}");
-            request.Headers.Add("Authorization", $"Bearer {YOUR_ACCESS_TOKEN}");
+            request.Headers.Add("Authorization", $"Bearer {accessToken}");
             return request;
         }
 
@@ -206,29 +263,6 @@ namespace YourProject.Controllers
         private T DeserializeJson<T>(string jsonString)
         {
             return JsonConvert.DeserializeObject<T>(jsonString);
-        }
-
-        private Product CreateProductFromResponse(ProductResponse productResponse)
-        {
-            return new Product
-            {
-                Id = productResponse.Id,
-                Name = productResponse.Name,
-                Description = productResponse.Description,
-                Category = productResponse.Category,
-                SellingMode = productResponse.SellingMode,
-                Images = productResponse.Images?.Pictures?.Data,
-                Attributes = productResponse.Parameters?.Parameters?.Data?.Select(p => new Attribute
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Values = p.Values?.Select(v => new AttributeValue { Value = v.Value }).ToList()
-                }).ToList(),
-                Vendor = productResponse.Seller,
-                Stock = productResponse.Stock,
-                Condition = productResponse.Condition,
-                Ean = productResponse.Ean
-            };
         }
 
         #endregion
