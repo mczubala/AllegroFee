@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using YourProject.Controllers;
+using AllegroFee.Controllers;
 using Attribute = System.Attribute;
 
 namespace AllegroFee.Models;

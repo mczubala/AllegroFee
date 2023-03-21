@@ -1,18 +1,13 @@
-using System.Collections.Generic;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using AllegroFee.Models;
 using AllegroFee.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Attribute = AllegroFee.Models.Attribute;
 
-namespace YourProject.Controllers
+namespace AllegroFee.Controllers
 {
     [ApiController]
     [Route("[controller]")]
@@ -20,7 +15,6 @@ namespace YourProject.Controllers
     {
         private readonly IHttpClientFactory _clientFactory;
         private readonly IAccessTokenProvider _accessTokenProvider;
-        private string YOUR_ACCESS_TOKEN = "";
         private readonly string AllegroApiBaseUrl;
         private const string MeEndpoint = "me";
 
@@ -30,8 +24,8 @@ namespace YourProject.Controllers
             _accessTokenProvider = accessTokenProvider;
             AllegroApiBaseUrl = configuration.GetValue<string>("AllegroApiBaseUrl");
         }
-
-        [HttpGet("check-token")]
+        #region Action Methods
+[HttpGet("check-token")]
         public async Task<IActionResult> CheckTokenForApplication()
         {
             var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
@@ -44,12 +38,9 @@ namespace YourProject.Controllers
             {
                 var responseString = await response.Content.ReadAsStringAsync();
                 // do something with the response
-                return Ok();
+                return Ok(responseString);
             }
-            else
-            {
-                return BadRequest();
-            }
+            return BadRequest();
         }
         [HttpGet("category/{categoryId}")]
         public async Task<IActionResult> GetCategory(string categoryId)
@@ -82,6 +73,7 @@ namespace YourProject.Controllers
                 return BadRequest(ex.Message);
             }
         }
+        
         [HttpGet("categories/{categoryId}")]
         public async Task<IActionResult> GetSellingConditionsForCategoryAsync(string categoryId)
         {
@@ -94,23 +86,62 @@ namespace YourProject.Controllers
             string responseContent = await response.Content.ReadAsStringAsync();
             return Ok(JObject.Parse(responseContent));
         }
-        [HttpPost("offer-fee-preview")]
-        public async Task<JsonElement> GetOfferFeePreviewAsync(JsonElement offerData)
+
+        [HttpGet("offer-fee-preview/{offerId}")]
+        public async Task<IActionResult> GetOfferFeePreviewByOfferIdAsync(string offerId)
         {
+            var offerDataResponse = await GetOfferDataAsync(offerId) as OkObjectResult;
+
+            if (offerDataResponse == null)
+            {
+                return BadRequest("Failed to get offer data.");
+            }
+
+            var offerData = offerDataResponse.Value as JObject;
+
+            var offerFeeResponse = await GetOfferFeePreviewAsync(offerData) as OkObjectResult;
+            var response = offerFeeResponse.Value as JObject;
+            return Ok(response);
+        }
+        
+        [HttpPost("offer-fee-preview")]
+        public async Task<IActionResult> GetOfferFeePreviewAsync([FromBody] JObject offerData)
+        {
+            // Retrieve the access token for the Allegro API
             var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
+
+            // Create a new HttpClient for sending the request
             using var httpClient = new HttpClient();
+
+            // Create a new HttpRequestMessage for the offer-fee-preview endpoint
             var request = new HttpRequestMessage(HttpMethod.Post, "https://api.allegro.pl.allegrosandbox.pl/pricing/offer-fee-preview");
+
+            // Set the Accept header to specify the desired media type
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             request.Headers.Add("Accept-Language", "PL");
-            request.Content = new StringContent(JsonConvert.SerializeObject(offerData), Encoding.UTF8, "application/vnd.allegro.public.v1+json");
 
+            // Serialize the offer data to a JSON string
+            string jsonString = JsonConvert.SerializeObject(new { offer = offerData });
+
+            // Create the request content with the serialized JSON string and the appropriate content type
+            var content = new StringContent(jsonString, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
+
+            // Set the request content
+            request.Content = content;
+
+            // Send the request and get the response
             var response = await httpClient.SendAsync(request);
+
+            // Ensure the response was successful (status code 2xx)
             response.EnsureSuccessStatusCode();
+
+            // Read the response content as a string
             string responseContent = await response.Content.ReadAsStringAsync();
-            return JsonDocument.Parse(responseContent).RootElement;
+            return Ok(JObject.Parse(responseContent));
         }
-        
+
+
         [HttpGet("{productId}")]
         public async Task<IActionResult> GetProduct(string productId)
         {
@@ -132,14 +163,15 @@ namespace YourProject.Controllers
                 return BadRequest(ex.Message);
             }
         }
-
+        
+        
         [HttpGet("offer-data/{offerId}")]
         public async Task<IActionResult> GetOfferDataAsync(string offerId)
         {
             try
             {
                 var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-                var request = CreateAllegroApiRequest($"sale/offers/{offerId}", accessToken);
+                var request = CreateAllegroApiRequest($"sale/product-offers/{offerId}", accessToken);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
                 var response = await SendAllegroApiRequest(request);
@@ -154,7 +186,9 @@ namespace YourProject.Controllers
                 }
 
                 var responseString = await response.Content.ReadAsStringAsync();
-                return Ok(JObject.Parse(responseString));
+                var responseObject = JObject.Parse(responseString);
+                //var wrappedResponseObject = new JObject(new JProperty("offer", responseObject));
+                return Ok(responseObject);
             }
             catch (Exception ex)
             {
@@ -197,7 +231,9 @@ namespace YourProject.Controllers
 
             return await SendAllegroApiRequest(request);
         }
-
+        #endregion
+        
+        #region Private Methods
         private async Task<IEnumerable<PartialProductResponse>> HandleUserProductsResponse(HttpResponseMessage response)
         {
             var responseString = await response.Content.ReadAsStringAsync();
@@ -205,7 +241,6 @@ namespace YourProject.Controllers
 
             return userProducts;
         }
-
         private async Task<JObject> GetCurrentUserDetailsAsync()
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
@@ -220,8 +255,6 @@ namespace YourProject.Controllers
 
             return userDetails;
         }
-
-        #region Methods
         private Category CreateCategoryFromResponse(CategoryResponse response)
         {
             return new Category
@@ -264,27 +297,24 @@ namespace YourProject.Controllers
         {
             return JsonConvert.DeserializeObject<T>(jsonString);
         }
-
-        #endregion
-
         
-
+        #endregion
     }
-public class PartialProductResponse
-{
-    [JsonProperty("id")]
-    public string ProductId { get; set; }
-    public string Name { get; set; }
-    public Category Category { get; set; }
-    [JsonProperty("images")]
-    public List<Image> Images { get; set; }
-    [JsonProperty("sellingMode")]
-    public SellingMode SellingMode { get; set; }
-    [JsonProperty("tax")]
-    public Tax Tax { get; set; }
-    [JsonProperty("stock")]
-    public Stock Stock { get; set; }
-    [JsonProperty("promotion")]
-    public Promotion Promotion { get; set; }
-}
+    public class PartialProductResponse
+    {
+        [JsonProperty("id")]
+        public string ProductId { get; set; }
+        public string Name { get; set; }
+        public Category Category { get; set; }
+        [JsonProperty("images")]
+        public List<Image> Images { get; set; }
+        [JsonProperty("sellingMode")]
+        public SellingMode SellingMode { get; set; }
+        [JsonProperty("tax")]
+        public Tax Tax { get; set; }
+        [JsonProperty("stock")]
+        public Stock Stock { get; set; }
+        [JsonProperty("promotion")]
+        public Promotion Promotion { get; set; }
+    }
 }
