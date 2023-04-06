@@ -96,12 +96,13 @@ namespace AllegroFee.Controllers
             {
                 return BadRequest("Failed to get offer data.");
             }
-
             var offerData = offerDataResponse.Value as JObject;
 
             var offerFeeResponse = await GetOfferFeePreviewAsync(offerData) as OkObjectResult;
-            var response = offerFeeResponse.Value as JObject;
-            return Ok(response);
+            // Convert JObject to string
+            var response = offerFeeResponse.Value.ToString(); 
+            // Return string content as JSON
+            return Content(response, "application/json"); 
         }
         
         [HttpPost("offer-fee-preview")]
@@ -109,8 +110,7 @@ namespace AllegroFee.Controllers
         {
             // Retrieve the access token for the Allegro API
             var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-
-            // Create a new HttpClient for sending the request
+            
             using var httpClient = new HttpClient();
 
             // Create a new HttpRequestMessage for the offer-fee-preview endpoint
@@ -126,8 +126,6 @@ namespace AllegroFee.Controllers
 
             // Create the request content with the serialized JSON string and the appropriate content type
             var content = new StringContent(jsonString, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
-
-            // Set the request content
             request.Content = content;
 
             // Send the request and get the response
@@ -138,7 +136,8 @@ namespace AllegroFee.Controllers
 
             // Read the response content as a string
             string responseContent = await response.Content.ReadAsStringAsync();
-            return Ok(JObject.Parse(responseContent));
+            var result = JObject.Parse(responseContent);
+            return Ok(result);
         }
 
 
