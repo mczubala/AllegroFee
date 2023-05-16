@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
-using AllegroFee.Models;
 using AllegroFee.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
@@ -16,7 +15,6 @@ namespace AllegroFee.Controllers
         private readonly IHttpClientFactory _clientFactory;
         private readonly IAccessTokenProvider _accessTokenProvider;
         private readonly string AllegroApiBaseUrl;
-        private const string MeEndpoint = "me";
 
         public ProductController(IHttpClientFactory clientFactory, IAccessTokenProvider accessTokenProvider, IConfiguration configuration)
         {
@@ -24,68 +22,8 @@ namespace AllegroFee.Controllers
             _accessTokenProvider = accessTokenProvider;
             AllegroApiBaseUrl = configuration.GetValue<string>("AllegroApiBaseUrl");
         }
-        #region Action Methods
-[HttpGet("check-token")]
-        public async Task<IActionResult> CheckTokenForApplication()
-        {
-            var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-            var request = new HttpRequestMessage(HttpMethod.Get, $"{AllegroApiBaseUrl}/{MeEndpoint}");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-            var response = await SendAllegroApiRequest(request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var responseString = await response.Content.ReadAsStringAsync();
-                // do something with the response
-                return Ok(responseString);
-            }
-            return BadRequest();
-        }
-        [HttpGet("category/{categoryId}")]
-        public async Task<IActionResult> GetCategory(string categoryId)
-        {
-            try
-            {
-                var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-                var request = CreateAllegroApiRequest($"sale/categories/{categoryId}", accessToken);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-                var response = await SendAllegroApiRequest(request);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    if (response.StatusCode == HttpStatusCode.NotFound)
-                    {
-                        return NotFound();
-                    }
-                    return BadRequest($"Failed to get category. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
-                }
-
-                var responseString = await response.Content.ReadAsStringAsync();
-                var categoryResponse = DeserializeJson<CategoryResponse>(responseString);
-                var category = CreateCategoryFromResponse(categoryResponse);
-
-                return Ok(category);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
         
-        [HttpGet("categories/{categoryId}")]
-        public async Task<IActionResult> GetSellingConditionsForCategoryAsync(string categoryId)
-        {
-            var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-            using var httpClient = new HttpClient();
-            string relativeUrl = $"sale/categories/{categoryId}/selling-conditions";
-            var request = CreateAllegroApiRequest(relativeUrl, accessToken);
-            var response = await httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            string responseContent = await response.Content.ReadAsStringAsync();
-            return Ok(JObject.Parse(responseContent));
-        }
+        #region Action Methods
 
         [HttpGet("offer-fee-preview/{offerId}")]
         public async Task<IActionResult> GetOfferFeePreviewByOfferIdAsync(string offerId)
@@ -254,14 +192,6 @@ namespace AllegroFee.Controllers
 
             return userDetails;
         }
-        private Category CreateCategoryFromResponse(CategoryResponse response)
-        {
-            return new Category
-            {
-                Id = response.Id,
-                Name = response.Name,
-            };
-        }
         private async Task<HttpResponseMessage> GetProductResponseAsync(string productId)
         {
             var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
@@ -298,22 +228,5 @@ namespace AllegroFee.Controllers
         }
         
         #endregion
-    }
-    public class PartialProductResponse
-    {
-        [JsonProperty("id")]
-        public string ProductId { get; set; }
-        public string Name { get; set; }
-        public Category Category { get; set; }
-        [JsonProperty("images")]
-        public List<Image> Images { get; set; }
-        [JsonProperty("sellingMode")]
-        public SellingMode SellingMode { get; set; }
-        [JsonProperty("tax")]
-        public Tax Tax { get; set; }
-        [JsonProperty("stock")]
-        public Stock Stock { get; set; }
-        [JsonProperty("promotion")]
-        public Promotion Promotion { get; set; }
     }
 }

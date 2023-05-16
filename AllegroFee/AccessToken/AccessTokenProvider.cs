@@ -1,9 +1,8 @@
 using System.Globalization;
-using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using System.Web;
+using AllegroFee.AccessToken;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -13,7 +12,6 @@ public class AccessTokenProvider : IAccessTokenProvider
     private readonly string _clientId;
     private readonly string _clientSecret;
     private readonly string _tokenUrl;
-    private readonly string _authorizationEndpoint;
     private readonly string _redirectUri = "http://localhost:8000";
     private string _accessToken;
     private DateTime _accessTokenExpiration;
@@ -26,7 +24,6 @@ public class AccessTokenProvider : IAccessTokenProvider
         _clientId = clientId;
         _clientSecret = clientSecret;
         _tokenUrl = tokenUrl;
-        _authorizationEndpoint = authorizationEndpoint;
     }
 
     public async Task<string> GetAccessForApplicationTokenAsync()
@@ -154,22 +151,5 @@ public class AccessTokenProvider : IAccessTokenProvider
         DateTime expirationTime = DateTime.Parse(data["expirationTime"], null, DateTimeStyles.RoundtripKind);
 
         return (accessToken, expirationTime);
-    }
-
-
-    public class TokenErrorData
-    {
-        [JsonProperty("error")] public string Error { get; set; }
-
-        [JsonProperty("error_description")] public string ErrorDescription { get; set; }
-
-        [JsonProperty("error_uri")] public string ErrorUri { get; set; }
-    }
-    
-    public class AccessTokenData
-    {
-        [JsonProperty("access_token")] public string AccessToken { get; set; }
-
-        [JsonProperty("expires_in")] public int ExpiresIn { get; set; }
     }
 }
