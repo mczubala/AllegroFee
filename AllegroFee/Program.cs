@@ -1,3 +1,4 @@
+using AllegroFee.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,8 @@ builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
     var authorizationEndpoint = builder.Configuration["authorizationEndpoint"];
     return new AccessTokenProvider(httpClient, clientId, clientSecret, tokenUrl, authorizationEndpoint);
 });
+
+builder.Services.AddTransient<CalculationService>();
 
 builder.Services.AddControllers();
 
