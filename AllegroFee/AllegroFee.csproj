@@ -12,6 +12,7 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="7.0.0" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+        <PackageReference Include="System.Runtime.Caching" Version="8.0.0-rc.2.23479.6" />
     </ItemGroup>
 
 </Project>

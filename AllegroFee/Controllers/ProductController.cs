@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using AllegroFee.Responses;
+using AllegroFee.Services;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,6 +16,8 @@ namespace AllegroFee.Controllers
         private readonly IHttpClientFactory _clientFactory;
         private readonly IAccessTokenProvider _accessTokenProvider;
         private readonly string AllegroApiBaseUrl;
+        private readonly CategoryService _categoryService;
+
 
         public ProductController(IHttpClientFactory clientFactory, IAccessTokenProvider accessTokenProvider, IConfiguration configuration)
         {

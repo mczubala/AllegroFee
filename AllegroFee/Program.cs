@@ -1,5 +1,5 @@
+using AllegroFee.Interfaces;
 using AllegroFee.Services;
-using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,7 +17,9 @@ builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
     return new AccessTokenProvider(httpClient, clientId, clientSecret, tokenUrl, authorizationEndpoint);
 });
 
-builder.Services.AddTransient<CalculationService>();
+builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
+builder.Services.AddTransient<ICategoryService, CategoryService>();
+builder.Services.AddTransient<ICalculationService, CalculationService>();
 
 builder.Services.AddControllers();
 

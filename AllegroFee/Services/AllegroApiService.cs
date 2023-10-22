@@ -1,6 +1,15 @@
-public static class AllegroApiService
+using AllegroFee.Interfaces;
+
+public class AllegroApiService : IAllegroApiService
 {
-    public static HttpRequestMessage CreateAllegroApiRequest(string AllegroApiBaseUrl, string relativeUrl, string accessToken)
+    private readonly string AllegroApiBaseUrl;
+
+    public AllegroApiService(IConfiguration configuration)
+    {
+        AllegroApiBaseUrl = configuration.GetValue<string>("AllegroApiBaseUrl");
+    }
+
+    public HttpRequestMessage CreateAllegroApiRequest(string relativeUrl, string accessToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{AllegroApiBaseUrl}/{relativeUrl}");
         request.Headers.Add("Authorization", $"Bearer {accessToken}");

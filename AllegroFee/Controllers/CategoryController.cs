@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using AllegroFee.Interfaces;
 using AllegroFee.Models;
 using AllegroFee.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -13,15 +14,11 @@ namespace AllegroFee.Controllers
     [Route("categories")]
     public class CategoryController : ControllerBase
     {
-        private readonly IHttpClientFactory _clientFactory;
-        private readonly IAccessTokenProvider _accessTokenProvider;
-        private readonly string AllegroApiBaseUrl;
+        private readonly ICategoryService _categoryService;
 
-        public CategoryController(IHttpClientFactory clientFactory, IAccessTokenProvider accessTokenProvider, IConfiguration configuration)
+        public CategoryController(ICategoryService categoryService)
         {
-            _clientFactory = clientFactory;
-            _accessTokenProvider = accessTokenProvider;
-            AllegroApiBaseUrl = configuration.GetValue<string>("AllegroApiBaseUrl");
+            _categoryService = categoryService;
         }
         
         #region Action Methods
@@ -31,74 +28,36 @@ namespace AllegroFee.Controllers
         {
             try
             {
-                var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-                var request = CreateAllegroApiRequest($"sale/categories/{categoryId}", accessToken);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-                var response = await SendAllegroApiRequest(request);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    if (response.StatusCode == HttpStatusCode.NotFound)
-                    {
-                        return NotFound();
-                    }
-                    return BadRequest($"Failed to get category. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
-                }
-
-                var responseString = await response.Content.ReadAsStringAsync();
-                var categoryResponse = DeserializeJson<CategoryResponse>(responseString);
-                var category = CreateCategoryFromResponse(categoryResponse);
-
+                var category = await _categoryService.GetCategoryAsync(categoryId);
                 return Ok(category);
+            }
+            catch (ArgumentException)
+            {
+                return NotFound();
+            }
+            catch (HttpRequestException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpGet("categories/{categoryId}")]
         public async Task<IActionResult> GetSellingConditionsForCategoryAsync(string categoryId)
         {
-            var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-            using var httpClient = new HttpClient();
-            string relativeUrl = $"sale/categories/{categoryId}/selling-conditions";
-            var request = CreateAllegroApiRequest(relativeUrl, accessToken);
-            var response = await httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            string responseContent = await response.Content.ReadAsStringAsync();
-            return Ok(JObject.Parse(responseContent));
-        }
-        #endregion
-        
-        #region Private Methods
-        private Category CreateCategoryFromResponse(CategoryResponse response)
-        {
-            return new Category
+            try
             {
-                Id = response.Id,
-                Name = response.Name, };
+                var sellingConditions = await _categoryService.GetSellingConditionsForCategoryAsync(categoryId);
+                return Ok(sellingConditions);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
-        private HttpRequestMessage CreateAllegroApiRequest(string relativeUrl, string accessToken)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"{AllegroApiBaseUrl}/{relativeUrl}");
-            request.Headers.Add("Authorization", $"Bearer {accessToken}");
-            return request;
-        }
-
-        private async Task<HttpResponseMessage> SendAllegroApiRequest(HttpRequestMessage request)
-        {
-            var client = _clientFactory.CreateClient();
-            return await client.SendAsync(request);
-        }
-
-        private T DeserializeJson<T>(string jsonString)
-        {
-            return JsonConvert.DeserializeObject<T>(jsonString);
-        }
-        
         #endregion
     }
 }

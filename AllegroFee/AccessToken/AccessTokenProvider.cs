@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Runtime.Caching;
 using AllegroFee.AccessToken;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -16,6 +17,7 @@ public class AccessTokenProvider : IAccessTokenProvider
     private string _accessToken;
     private DateTime _accessTokenExpiration;
     private readonly string _tokenFileName = "access_token.json";
+    private MemoryCache _cache = new MemoryCache("AccessTokenCache");
 
     public AccessTokenProvider(HttpClient httpClient, string clientId, string clientSecret, string tokenUrl,
         string authorizationEndpoint)
@@ -54,17 +56,13 @@ public class AccessTokenProvider : IAccessTokenProvider
     }
     public async Task<string> GetAccessForUserTokenAsync()
     {
+        _accessToken = GetAccessTokenFromCache();
+
         if (_accessToken != null && DateTime.UtcNow < _accessTokenExpiration)
         {
-            (string accessToken, DateTime expirationTime) = await LoadAccessTokenFromFileAsync();
-
-            if (accessToken != null && DateTime.UtcNow < expirationTime)
-            {
-                _accessToken = accessToken;
-                _accessTokenExpiration = expirationTime;
-                return _accessToken;
-            }
+            return _accessToken;
         }
+        
         string codeVerifier = GenerateCodeVerifier();
         string codeChallenge = GenerateCodeChallenge(codeVerifier);
         string authorizationUrl = $"https://allegro.pl.allegrosandbox.pl/auth/oauth/authorize?response_type=code&client_id={_clientId}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&code_challenge_method=S256&code_challenge={codeChallenge}";
@@ -96,7 +94,7 @@ public class AccessTokenProvider : IAccessTokenProvider
         _accessToken = jsonResponse["access_token"].ToString();
         int expiresIn = jsonResponse["expires_in"].ToObject<int>();
         _accessTokenExpiration = DateTime.UtcNow.AddSeconds(expiresIn);
-        await SaveAccessTokenToFileAsync(_accessToken, _accessTokenExpiration);
+        SaveAccessTokenToCache(_accessToken, _accessTokenExpiration);
         return _accessToken;
     }
 
@@ -121,35 +119,19 @@ public class AccessTokenProvider : IAccessTokenProvider
     {
         return Convert.ToBase64String(input).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
-
-    private async Task SaveAccessTokenToFileAsync(string accessToken, DateTime expirationTime)
-    {
-        var data = new Dictionary<string, string>
-        {
-            { "accessToken", accessToken },
-            { "expirationTime", expirationTime.ToString("o") }
-        };
-        string json = JsonConvert.SerializeObject(data);
-
-        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AccessToken.json");
-        await File.WriteAllTextAsync(filePath, json);
-    }
     
-    private async Task<(string accessToken, DateTime expirationTime)> LoadAccessTokenFromFileAsync()
+    private void SaveAccessTokenToCache(string accessToken, DateTime expirationTime)
     {
-        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AccessToken.json");
-
-        if (!File.Exists(filePath))
+        CacheItemPolicy policy = new CacheItemPolicy
         {
-            return (null, DateTime.MinValue);
-        }
-
-        string json = await File.ReadAllTextAsync(filePath);
-        var data = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
-
-        string accessToken = data["accessToken"];
-        DateTime expirationTime = DateTime.Parse(data["expirationTime"], null, DateTimeStyles.RoundtripKind);
-
-        return (accessToken, expirationTime);
+            AbsoluteExpiration = expirationTime
+        };
+        _cache.Set("AccessToken", accessToken, policy);
     }
+
+    private string GetAccessTokenFromCache()
+    {
+        return _cache.Get("AccessToken") as string;
+    }
+
 }
