@@ -19,68 +19,45 @@ public class CalculationService : ICalculationService
         _accessTokenProvider = accessTokenProvider;
         _allegroApiService = allegroApiService;
     }
-    public async Task<JObject> GetAllBillingEntriesAsync()
+
+    public Task<JObject> GetBillingByOfferIdAsync(string offerId)
     {
-        var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-        var request = _allegroApiService.CreateAllegroApiRequest("billing/billing-entries", accessToken);
-        var client = _clientFactory.CreateClient();
-        var response = await client.SendAsync(request);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw new ArgumentException("The requested resource was not found.");
-            }
-
-            throw new BadHttpRequestException(
-                $"Failed to get billing information. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
-        }
-
-        var responseString = await response.Content.ReadAsStringAsync();
-        var responseObject = JObject.Parse(responseString);
-        return responseObject;
+        throw new NotImplementedException();
     }
 
-    public async Task<JObject> GetBillingByOfferIdAsync(string offerId)
+
+    public async Task<ProductFee> GetCalculatedProductFeeByIdAsync(string offerId)
     {
-        var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-        var request = _allegroApiService.CreateAllegroApiRequest($"billing/billing-entries?offer.id={offerId}", accessToken);
-        var client = _clientFactory.CreateClient();
-        var response = await client.SendAsync(request);
+        var billingEntries = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
+        var result = new ProductFee();
+        var fixedFee = CalculateOfferFixedFee(offerId, billingEntries);
+        result.Fee = fixedFee;
+        return result;    
+    }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw new ArgumentException("The requested resource was not found.");
-            }
-
-            throw new BadHttpRequestException(
-                $"Failed to get billing information. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
-        }
-
-        var responseString = await response.Content.ReadAsStringAsync();
-        //calculation algorithm
-        var billingEntries = ParseBillingEntries(responseString);
+    private decimal CalculateOfferFixedFee(string offerId, List<BillingEntry> billingEntries)
+    {
         // Group by order id
         var groupedEntries = billingEntries
             .Where(x => x.Order != null) // exclude entries with null Order
             .GroupBy(x => x.Order.Id);
 
         // Calculate sum for each group
-        var sumResult = groupedEntries.Select(group => new
+        var sumResults = groupedEntries.Select(group => new
         {
             OrderId = group.Key,
             TotalAmount = group.Sum(item => decimal.Parse(item.Value.Amount, CultureInfo.InvariantCulture))
         });
         
+        // Get list of unique order ids
         var uniqueOfferIds = GetListOfUniqueOrderDataID(billingEntries);
+        
         List<JObject> orders = new List<JObject>();
         foreach (var uniqueOfferId in uniqueOfferIds)
         {
-             orders.Add(GetOrderByIdAsync(uniqueOfferId).Result); 
+            orders.Add(_allegroApiService.GetOrderByIdAsync(uniqueOfferId).Result); 
         }
+        
         List<Order> ordersList = new List<Order>();
         foreach (var order in orders)
         {
@@ -90,35 +67,18 @@ public class CalculationService : ICalculationService
         
         ProductFee productFee = new ProductFee();
         productFee.ProductId = offerId;
-        decimal totalFee = 0;
-        var firstsumresult = sumResult.FirstOrDefault();
-        var xxx = ordersList.Where(x => x.Id == firstsumresult.OrderId).FirstOrDefault();
-        var quantity = xxx.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
-        var price = xxx.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.AmountValue;
-        totalFee = firstsumresult.TotalAmount;
-        var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
-        //
+        var percentageFees = new List<decimal>();
+        foreach (var sumResult in sumResults)
+        {
+            var order = ordersList.Where(x => x.Id == sumResult.OrderId).FirstOrDefault();
+            var quantity = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
+            var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.AmountValue;
+            var totalFee = sumResult.TotalAmount;
+            var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
+            percentageFees.Add(percentFee);
+        }
         
-        var responseObject = JObject.Parse(responseString);
-        return responseObject;
-    }
-    public static List<BillingEntry> ParseBillingEntries(string jsonString)
-    {
-        try
-        {
-            JObject jsonResponse = JObject.Parse(jsonString);
-            JArray entriesArray = (JArray)jsonResponse["billingEntries"];
-
-            // Newtonsoft.Json library is used for deserialization
-            var billingEntries = entriesArray.ToObject<List<BillingEntry>>();
-
-            return billingEntries;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
-        }
+        return percentageFees.Average();;   
     }
     
     private static List<string> GetListOfUniqueOrderDataID(List<BillingEntry> billingEntries)
@@ -139,35 +99,6 @@ public class CalculationService : ICalculationService
         }
     }
     
-    public async Task<JObject> GetOrderByIdAsync(string orderId)
-    {
-        try
-        {
-            var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
-            var request = _allegroApiService.CreateAllegroApiRequest($"order/checkout-forms/{orderId}", accessToken);
-            var client = _clientFactory.CreateClient();
-            var response = await client.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                if (response.StatusCode == HttpStatusCode.NotFound)
-                {
-                    throw new ArgumentException("The requested resource was not found.");
-                }
-
-                throw new BadHttpRequestException(
-                    $"Failed to get order information. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}");
-            }
-
-            var responseString = await response.Content.ReadAsStringAsync();
-            var responseObject = JObject.Parse(responseString);
-            return responseObject;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
-        }
-    }
+    
 
 }

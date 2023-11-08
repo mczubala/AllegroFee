@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 namespace AllegroFee.Controllers
 {
     [ApiController]
-    [Route("categories")]
+    [Route("[controller]")]
     public class CategoryController : ControllerBase
     {
         private readonly ICategoryService _categoryService;
@@ -23,8 +23,8 @@ namespace AllegroFee.Controllers
         
         #region Action Methods
 
-        [HttpGet("category/{categoryId}")]
-        public async Task<IActionResult> GetCategory(string categoryId)
+        [HttpGet("{categoryId:int}")]
+        public async Task<IActionResult> GetCategoryById(string categoryId)
         {
             try
             {
@@ -45,7 +45,7 @@ namespace AllegroFee.Controllers
             }
         }
 
-        [HttpGet("categories/{categoryId}")]
+        [HttpGet("get-category-selling-conditions/{categoryId}")]
         public async Task<IActionResult> GetSellingConditionsForCategoryAsync(string categoryId)
         {
             try
