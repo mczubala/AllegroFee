@@ -1,7 +1,7 @@
 namespace AllegroFee.Models;
 
-public class ProductFee
+public class OfferFee
 {
-    public string ProductId { get; set; }
+    public string OfferId { get; set; }
     public decimal Fee { get; set; }
 }

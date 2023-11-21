@@ -18,24 +18,30 @@ public class CalculationController : ControllerBase
     }
     
     [HttpGet("get-calculated-offer-fee/{offerId}")]
-    public async Task<IActionResult> GetCalculatedProductFeeByIdAsync(string offerId)
+    public async Task<IActionResult> GetCalculatedOfferFeeByIdAsync(string offerId)
     {
-        try
+        var response = await _calculationService.GetCalculatedOfferFeeByIdAsync(offerId);
+
+        if (response.StatusCode == HttpStatusCode.OK)
         {
-            var billingInfo = await _calculationService.GetCalculatedProductFeeByIdAsync(offerId);
-            return Ok(billingInfo);
+            return Ok(response.Data);
         }
-        catch (ArgumentException)
+        else
         {
-            return NotFound();
+            return StatusCode((int)response.StatusCode, response.ErrorMessage);
         }
-        catch (HttpRequestException ex)
+    }
+
+    
+    [HttpGet("get-calculated-total-offer-fee/{offerId}")]
+    public async Task<IActionResult> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
+    {
+        var response = await _calculationService.GetCalculatedTotalOfferFeeByIdAsync(offerId);
+        if (response.StatusCode == HttpStatusCode.OK)
         {
-            return BadRequest(ex.Message);
+            return Ok(response.Data);
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ex.Message); // Internal Server Error
-        }
+
+        return StatusCode((int)response.StatusCode, response.ErrorMessage);
     }
 }

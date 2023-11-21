@@ -29,7 +29,7 @@ public class AllegroApiService : IAllegroApiService
         return await client.SendAsync(request);
     }
     
-    public async Task<JObject> GetOrderByIdAsync(string orderId)
+    public async Task<Order> GetOrderByIdAsync(string orderId)
     {
         try
         {
@@ -50,7 +50,7 @@ public class AllegroApiService : IAllegroApiService
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-            var responseObject = JObject.Parse(responseString);
+            var responseObject = ParseOrder(responseString);
             return responseObject;
         }
         catch (Exception e)
@@ -138,6 +138,20 @@ public class AllegroApiService : IAllegroApiService
             throw;
         }
     }
+    private static Order ParseOrder(string jsonString)
+    {
+        try
+        {
+            JObject jsonResponse = JObject.Parse(jsonString);
+            var order = jsonResponse.ToObject<Order>();
 
+            return order;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
     #endregion
 }
