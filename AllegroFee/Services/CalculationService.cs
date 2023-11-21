@@ -20,14 +20,20 @@ public class CalculationService : ICalculationService
     
     public async Task<ServiceResponse<OfferFee>> GetCalculatedOfferFeeByIdAsync(string offerId)
     {
+        var billingResponse = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
+        if (billingResponse.StatusCode != HttpStatusCode.OK)
+        {
+            return new ServiceResponse<OfferFee>(billingResponse.ErrorMessage, billingResponse.StatusCode);
+        }
+
+        if (billingResponse.Data == null || !billingResponse.Data.Any())
+        {
+            return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", HttpStatusCode.NotFound);
+        }
         try
         {
-            var billingEntries = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
-            if (billingEntries == null || !billingEntries.Any())
-                return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", HttpStatusCode.NotFound);
-
             var result = new OfferFee();
-            var fixedFee = CalculateOfferFixedFee(offerId, billingEntries);
+            var fixedFee = CalculateOfferFixedFee(offerId, billingResponse.Data);
             result.Fee = fixedFee;
             return new ServiceResponse<OfferFee>(result);
         }
@@ -40,14 +46,22 @@ public class CalculationService : ICalculationService
 
     public async Task<ServiceResponse<OfferFee>> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
     {
+        var billingResponse = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
+        if (billingResponse.StatusCode != HttpStatusCode.OK)
+        {
+            return new ServiceResponse<OfferFee>(billingResponse.ErrorMessage, billingResponse.StatusCode);
+        }
+
+        if (billingResponse.Data == null || !billingResponse.Data.Any())
+        {
+            return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", HttpStatusCode.NotFound);
+        }
+        
         try
         {
-            var billingEntries = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
-            if (billingEntries == null || !billingEntries.Any())
-                return new ServiceResponse<OfferFee>($"No billing entries found for offerid {offerId}", HttpStatusCode.NotFound);
-
             var result = new OfferFee();
             result.OfferId = offerId;
+            var billingEntries = billingResponse.Data;
             var billingSum = billingEntries.Sum(x => decimal.Parse(x.Value.Amount, CultureInfo.InvariantCulture));
         
             var totalSaleResponse = await GetCalculatedTotalOfferSaleAsync(offerId, GetListOfUniqueOrderDataID(billingEntries));
@@ -59,7 +73,7 @@ public class CalculationService : ICalculationService
         }
         catch (Exception e)
         {
-            return new ServiceResponse<OfferFee>(e.Message, HttpStatusCode.InternalServerError); // Internal Server Error
+            return new ServiceResponse<OfferFee>(e.Message, HttpStatusCode.InternalServerError);
         }
     }
     public async Task<ServiceResponse<decimal>> GetCalculatedTotalOfferSaleAsync(string offerId, List<string> orderIds)
@@ -84,15 +98,9 @@ public class CalculationService : ICalculationService
 
             return new ServiceResponse<decimal>(result);
         }
-        catch (FormatException fe)
+        catch (Exception ex)
         {
-            // Handle format exception if decimal parsing fails
-            return new ServiceResponse<decimal>($"Invalid format: {fe.Message}", HttpStatusCode.BadRequest ); // Bad Request
-        }
-        catch (Exception e)
-        {
-            // Handle other general exceptions
-            return new ServiceResponse<decimal>($"Internal server error: {e.Message}", HttpStatusCode.InternalServerError); // Internal Server Error
+            return new ServiceResponse<decimal>($"Internal server error: {ex.Message}", HttpStatusCode.InternalServerError); 
         }
     }
 
@@ -104,41 +112,52 @@ public class CalculationService : ICalculationService
 
     private decimal CalculateOfferFixedFee(string offerId, List<BillingEntry> billingEntries)
     {
-        // Group by order id
-        var groupedEntries = billingEntries
-            .Where(x => x.Order != null) // exclude entries with null Order
-            .GroupBy(x => x.Order.Id);
+        decimal result = 0;
+        try
+        {
+            // Group by order id
+            var groupedEntries = billingEntries
+                .Where(x => x.Order != null) // exclude entries with null Order
+                .GroupBy(x => x.Order.Id);
 
-        // Calculate sum for each group
-        var sumResults = groupedEntries.Select(group => new
-        {
-            OrderId = group.Key,
-            TotalAmount = group.Sum(item => decimal.Parse(item.Value.Amount, CultureInfo.InvariantCulture))
-        });
+            // Calculate sum for each group
+            var sumResults = groupedEntries.Select(group => new
+            {
+                OrderId = group.Key,
+                TotalAmount = group.Sum(item => decimal.Parse(item.Value.Amount, CultureInfo.InvariantCulture))
+            });
         
-        // Get list of unique order ids
-        var uniqueOrderIds = GetListOfUniqueOrderDataID(billingEntries);
+            // Get list of unique order ids
+            var uniqueOrderIds = GetListOfUniqueOrderDataID(billingEntries);
         
-        List<Order> orders = new List<Order>();
-        foreach (var uniqueOrderId in uniqueOrderIds)
-        {
-            orders.Add(_allegroApiService.GetOrderByIdAsync(uniqueOrderId).Result); 
+            List<Order> orders = new List<Order>();
+            foreach (var uniqueOrderId in uniqueOrderIds)
+            {
+                orders.Add(_allegroApiService.GetOrderByIdAsync(uniqueOrderId).Result); 
+            }
+        
+            OfferFee productFee = new OfferFee();
+            productFee.OfferId = offerId;
+            var percentageFees = new List<decimal>();
+            foreach (var sumResult in sumResults)
+            {
+                var order = orders.Where(x => x.Id == sumResult.OrderId).FirstOrDefault();
+                var quantity = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
+                var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.AmountValue;
+                var totalFee = sumResult.TotalAmount;
+                var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
+                percentageFees.Add(percentFee);
+                result = percentageFees.Average();;   
+            }
         }
-        
-        OfferFee productFee = new OfferFee();
-        productFee.OfferId = offerId;
-        var percentageFees = new List<decimal>();
-        foreach (var sumResult in sumResults)
+        catch (Exception e)
         {
-            var order = orders.Where(x => x.Id == sumResult.OrderId).FirstOrDefault();
-            var quantity = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
-            var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.AmountValue;
-            var totalFee = sumResult.TotalAmount;
-            var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
-            percentageFees.Add(percentFee);
+            Console.WriteLine(e);
+            throw;
         }
-        
-        return percentageFees.Average();;   
+
+        return result;
+
     }
     
     private static List<string> GetListOfUniqueOrderDataID(List<BillingEntry> billingEntries)

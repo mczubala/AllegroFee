@@ -1,5 +1,7 @@
+using AllegroFee.Configurations;
 using AllegroFee.Interfaces;
 using AllegroFee.Services;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,14 +9,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient();
 // Add services to the container.
 // Register the access token provider with the DI container
+
+builder.Services.Configure<AllegroApiSettings>(builder.Configuration.GetSection("AllegroApiSettings"));
+
 builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
 {
+    var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var clientId = builder.Configuration["clientId"];
-    var clientSecret = builder.Configuration["clientSecret"];
-    var tokenUrl = builder.Configuration["tokenUrl"];
-    var authorizationEndpoint = builder.Configuration["authorizationEndpoint"];
-    return new AccessTokenProvider(httpClient, clientId, clientSecret, tokenUrl, authorizationEndpoint);
+    return new AccessTokenProvider(httpClient, options.ClientId, options.ClientSecret, options.TokenUrl, options.AuthorizationEndpoint);
 });
 
 builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
