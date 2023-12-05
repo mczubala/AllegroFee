@@ -1,6 +1,7 @@
 using AllegroFee.Configurations;
 using AllegroFee.Interfaces;
 using AllegroFee.Services;
+using FluentValidation.AspNetCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,11 +26,13 @@ builder.Services.AddTransient<ICalculationService, CalculationService>();
 
 builder.Services.AddControllers();
 
+builder.Services.AddFluentValidationAutoValidation();
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors();
-
+    
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

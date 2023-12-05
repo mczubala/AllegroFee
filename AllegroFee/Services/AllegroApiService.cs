@@ -3,6 +3,7 @@ using AllegroFee.Configurations;
 using AllegroFee.Interfaces;
 using AllegroFee.Models;
 using AllegroFee.Responses;
+using FluentValidation.Results;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json.Linq;
 
@@ -70,8 +71,19 @@ public class AllegroApiService : IAllegroApiService
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-            var responseObject = ParseOrder(responseString);
-            return responseObject;
+            var order = ParseOrder(responseString);
+            
+            // Validate the order object
+            ValidationResult validationResult;
+            OrderValidator validator = new OrderValidator();
+            validationResult = validator.Validate(order);
+
+            if (!validationResult.IsValid) 
+            {
+                throw new ApiDataException("Invalid order data received from API.", 1001);
+            }
+            
+            return order;
         }
         catch (Exception e)
         {

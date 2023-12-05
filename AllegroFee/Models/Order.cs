@@ -1,12 +1,15 @@
+using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json;
 
 namespace AllegroFee.Models;
 
 public class Order
 {
+    [Required]
     public string Id { get; set; }
     public string MessageToSeller { get; set; }
     public string Status { get; set; }
+    [Required]
     public List<LineItem> LineItems { get; set; }
     public List<object> Surcharges { get; set; }
     public List<object> Discounts { get; set; }
@@ -23,6 +26,7 @@ public class Amount
 }
 public class LineItem
 {
+    [Required]
     public string Id { get; set; }
     public Offer Offer { get; set; }
     public int Quantity { get; set; }

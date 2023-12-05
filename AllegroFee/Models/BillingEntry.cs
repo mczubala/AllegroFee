@@ -1,7 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace AllegroFee.Models;
 
 public class BillingEntry
 {
+    [Required]
     public string Id { get; set; }
     public DateTime OccurredAt { get; set; }
     public TypeData Type { get; set; }
@@ -9,6 +12,7 @@ public class BillingEntry
     public MoneyData Value { get; set; }
     public TaxData Tax { get; set; }
     public MoneyData Balance { get; set; }
+    [Required]
     public OrderData Order { get; set; }
 }
 
