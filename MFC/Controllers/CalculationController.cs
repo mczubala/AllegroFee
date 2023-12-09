@@ -1,24 +1,23 @@
 using System.Net;
 using MFC.Interfaces;
 using MFC.Responses;
-using MFC.Services;
+
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json.Linq;
 
 namespace MFC.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class CalculationController : ControllerBase
+public class FeeController : ControllerBase
 {
     private readonly ICalculationService _calculationService;
 
-    public CalculationController(ICalculationService calculationService)
+    public FeeController(ICalculationService calculationService)
     {
         _calculationService = calculationService;
     }
     
-    [HttpGet("get-calculated-offer-fee/{offerId}")]
+    [HttpGet("get-offer-fee/{offerId}")]
     public async Task<IActionResult> GetCalculatedOfferFeeByIdAsync(string offerId)
     {
         var response = await _calculationService.GetCalculatedOfferFeeByIdAsync(offerId);
@@ -30,7 +29,7 @@ public class CalculationController : ControllerBase
         return StatusCode((int)HttpStatusCode.BadRequest, response.Message);
     }
     
-    [HttpGet("get-calculated-total-offer-fee/{offerId}")]
+    [HttpGet("get-total-offer-fee/{offerId}")]
     public async Task<IActionResult> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
     {
         var response = await _calculationService.GetCalculatedTotalOfferFeeByIdAsync(offerId);

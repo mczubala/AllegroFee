@@ -1,3 +1,4 @@
+using FluentValidation.AspNetCore;
 using MFC.Configurations;
 using MFC.Interfaces;
 using MFC.Services;
@@ -24,6 +25,8 @@ builder.Services.AddTransient<ICategoryService, CategoryService>();
 builder.Services.AddTransient<ICalculationService, CalculationService>();
 
 builder.Services.AddControllers();
+
+builder.Services.AddFluentValidationAutoValidation();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
