@@ -17,18 +17,6 @@ public class FeeController : ControllerBase
         _calculationService = calculationService;
     }
     
-    [HttpGet("get-offer-fee/{offerId}")]
-    public async Task<IActionResult> GetCalculatedOfferFeeByIdAsync(string offerId)
-    {
-        var response = await _calculationService.GetCalculatedOfferFeeByIdAsync(offerId);
-
-        if (response.ResponseStatus == ServiceStatusCodes.StatusCode.Success)
-        {
-            return Ok(response.Data);
-        }
-        return StatusCode((int)HttpStatusCode.BadRequest, response.Message);
-    }
-    
     [HttpGet("get-total-offer-fee/{offerId}")]
     public async Task<IActionResult> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
     {

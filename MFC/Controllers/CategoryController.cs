@@ -1,16 +1,13 @@
 using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
 using MFC.Interfaces;
-using MFC.Models;
 using MFC.Responses;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace MFC.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("[controller]")]
     public class CategoryController : ControllerBase
     {
@@ -26,24 +23,13 @@ namespace MFC.Controllers
         [HttpGet("{categoryId:int}")]
         public async Task<IActionResult> GetCategoryById(string categoryId)
         {
-            try
+            var response = await _categoryService.GetCategoryAsync(categoryId);
+            if (response.ResponseStatus == ServiceStatusCodes.StatusCode.Success)
             {
-                var category = await _categoryService.GetCategoryAsync(categoryId);
-                return Ok(category);
+                return Ok(response.Data);
             }
-            catch (ArgumentException)
-            {
-                return NotFound();
-            }
-            catch (HttpRequestException ex)
-            {
-                return BadRequest(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
+
+            return StatusCode((int)HttpStatusCode.BadRequest, response.Message);        }
         
         #endregion
     }

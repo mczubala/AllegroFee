@@ -3,6 +3,10 @@ using MFC.Configurations;
 using MFC.Interfaces;
 using MFC.Services;
 using Microsoft.Extensions.Options;
+using Refit;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.CookiePolicy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +14,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient();
 // Add services to the container.
 // Register the access token provider with the DI container
+builder.Services.AddRefitClient<IAllegroApiClient>()
+    .ConfigureHttpClient((sp, c) =>
+    {
+        var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;
+        c.BaseAddress = new Uri(options.AllegroApiBaseUrl);
+    });
 
 builder.Services.Configure<AllegroApiSettings>(builder.Configuration.GetSection("AllegroApiSettings"));
 
@@ -19,6 +29,28 @@ builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
     var httpClient = sp.GetRequiredService<HttpClient>();
     return new AccessTokenProvider(httpClient, options.ClientId, options.ClientSecret, options.TokenUrl, options.AuthorizationEndpoint);
 });
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = SameSiteMode.Lax; 
+    options.HttpOnly = HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.SameAsRequest;
+});
+
+builder.Services.Configure<GoogleOAuthSettings>(builder.Configuration.GetSection("GoogleOAuth"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<GoogleOAuthSettings>>().Value);
+
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+    })
+    .AddCookie()
+    .AddGoogle(options =>
+    {
+        var googleSettings = builder.Configuration.GetSection("GoogleOAuth").Get<GoogleOAuthSettings>();
+        options.ClientId = googleSettings.ClientId;
+        options.ClientSecret = googleSettings.ClientSecret;
+    });
 
 builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
 builder.Services.AddTransient<ICategoryService, CategoryService>();
@@ -31,9 +63,12 @@ builder.Services.AddFluentValidationAutoValidation();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
 builder.Services.AddCors();
 
 var app = builder.Build();
+app.UseCookiePolicy();
+app.UseAuthentication();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -47,7 +82,7 @@ app.UseCors(builder => builder
     .AllowAnyMethod()
     .AllowAnyHeader());
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseAuthorization();
 

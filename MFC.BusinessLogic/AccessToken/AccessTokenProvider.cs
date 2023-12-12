@@ -16,8 +16,8 @@ public class AccessTokenProvider : IAccessTokenProvider
     private readonly string _redirectUri = "http://localhost:8000";
     private string _accessToken;
     private DateTime _accessTokenExpiration;
-    private readonly string _tokenFileName = "access_token.json";
     private MemoryCache _cache = new MemoryCache("AccessTokenCache");
+    private readonly string _authorizationEndpoint;
 
     public AccessTokenProvider(HttpClient httpClient, string clientId, string clientSecret, string tokenUrl,
         string authorizationEndpoint)
@@ -26,12 +26,11 @@ public class AccessTokenProvider : IAccessTokenProvider
         _clientId = clientId;
         _clientSecret = clientSecret;
         _tokenUrl = tokenUrl;
+        _authorizationEndpoint = authorizationEndpoint;
     }
 
     public async Task<string> GetAccessForApplicationTokenAsync()
     {
-        if (_accessTokenExpiration < DateTime.UtcNow)
-        {
             var tokenRequest = new HttpRequestMessage(HttpMethod.Post, _tokenUrl);
             var authorizationHeader = new AuthenticationHeaderValue("Basic",
                 Convert.ToBase64String(Encoding.ASCII.GetBytes($"{_clientId}:{_clientSecret}")));
@@ -48,11 +47,10 @@ public class AccessTokenProvider : IAccessTokenProvider
 
             var tokenResult = await tokenResponse.Content.ReadAsStringAsync();
             var tokenData = JsonConvert.DeserializeObject<AccessTokenData>(tokenResult);
-            _accessToken = tokenData.AccessToken;
-            _accessTokenExpiration = DateTime.UtcNow.AddSeconds(tokenData.ExpiresIn);
-        }
+            //_accessToken = tokenData.AccessToken;
+            //_accessTokenExpiration = DateTime.UtcNow.AddSeconds(tokenData.ExpiresIn);
 
-        return _accessToken;
+        return tokenData.AccessToken;
     }
     public async Task<string> GetAccessForUserTokenAsync()
     {
@@ -65,7 +63,7 @@ public class AccessTokenProvider : IAccessTokenProvider
         
         string codeVerifier = GenerateCodeVerifier();
         string codeChallenge = GenerateCodeChallenge(codeVerifier);
-        string authorizationUrl = $"https://allegro.pl.allegrosandbox.pl/auth/oauth/authorize?response_type=code&client_id={_clientId}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&code_challenge_method=S256&code_challenge={codeChallenge}";
+        string authorizationUrl = $"{_authorizationEndpoint}?response_type=code&client_id={_clientId}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&code_challenge_method=S256&code_challenge={codeChallenge}";
 
         Console.WriteLine("Please open the following URL in your browser and grant the required permissions:");
         Console.WriteLine(authorizationUrl);

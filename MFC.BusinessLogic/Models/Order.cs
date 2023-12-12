@@ -18,34 +18,25 @@ public class Order
     public string Revision { get; set; }
 }
 
-public class Amount
-{
-    [JsonProperty("amount")]
-    public string AmountValue { get; set; }
-    public string Currency { get; set; }
-}
 public class LineItem
 {
     [Required]
     public string Id { get; set; }
     public Offer Offer { get; set; }
     public int Quantity { get; set; }
-    public Amount OriginalPrice { get; set; }
-    public Amount Price { get; set; }
+    public OriginalPrice OriginalPrice { get; set; }
+    public Price Price { get; set; }
     public object Reconciliation { get; set; }
     public List<object> SelectedAdditionalServices { get; set; }
     public string BoughtAt { get; set; }
 }
 
-public class Offer
-{
-    public string Id { get; set; }
-    public string Name { get; set; }
-    public object External { get; set; }
-}
-
 public class Summary
 {
-    public Amount TotalToPay { get; set; }
+    public TotalToPay TotalToPay { get; set; }
 }
-
+public class TotalToPay
+{
+    public string Amount { get; set; }
+    public string Currency { get; set; }
+}

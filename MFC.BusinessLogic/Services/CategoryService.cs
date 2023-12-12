@@ -8,15 +8,18 @@ namespace MFC.Services;
 
 public class CategoryService : ICategoryService
 {
-    private readonly IAllegroApiService _allegroApiService;
+    private readonly IAllegroApiClient _allegroApiClient;
     private readonly IAccessTokenProvider _accessTokenProvider;
     private readonly IHttpClientFactory _clientFactory;
+private readonly IAllegroApiService _allegroApiService;
+    
 
-    public CategoryService(IAllegroApiService allegroApiService, IAccessTokenProvider accessTokenProvider, IHttpClientFactory clientFactory)
+    public CategoryService(IAccessTokenProvider accessTokenProvider, IHttpClientFactory clientFactory, IAllegroApiClient allegroApiClient, IAllegroApiService allegroApiService)
     {
-        _allegroApiService = allegroApiService;
         _accessTokenProvider = accessTokenProvider;
         _clientFactory = clientFactory;
+        _allegroApiClient = allegroApiClient;
+        _allegroApiService = allegroApiService;
     }
 
     public async Task<ServiceResponse<Category>> GetCategoryAsync(string categoryId)
@@ -24,28 +27,25 @@ public class CategoryService : ICategoryService
         try
         {
             var accessToken = await _accessTokenProvider.GetAccessForApplicationTokenAsync();
-            var request = _allegroApiService.CreateAllegroApiRequest($"sale/categories/{categoryId}", accessToken);
-            var response = await SendAllegroApiRequest(request);
-
-            if (!response.IsSuccessStatusCode)
+            var categoryResponse = await _allegroApiClient.GetCategoryByIdAsync(categoryId, $"Bearer {accessToken}");
+            
+            if (!categoryResponse.IsSuccessStatusCode)
             {
-                if (response.StatusCode == HttpStatusCode.NotFound)
+                if (categoryResponse.StatusCode == HttpStatusCode.NotFound)
                 {
                     return new ServiceResponse<Category>(null, $"Category not found", ServiceStatusCodes.StatusCode.NotFound);
                 }
 
-                return new ServiceResponse<Category>(null, $"Failed to get category. StatusCode={response.StatusCode} Reason={response.ReasonPhrase}", ServiceStatusCodes.StatusCode.Error);
+                return new ServiceResponse<Category>(null, $"Failed to get category. StatusCode={categoryResponse.StatusCode} Reason={categoryResponse.ReasonPhrase}", ServiceStatusCodes.StatusCode.Error);
             }
 
-            var responseString = await response.Content.ReadAsStringAsync();
-            var categoryResponse = JsonConvert.DeserializeObject<CategoryResponse>(responseString);
-            var category = CreateCategoryFromResponse(categoryResponse);
+
+            var category = categoryResponse.Content;
 
             return new ServiceResponse<Category>(category);
         }
         catch (Exception ex)
         {
-            // Log the exception if needed
             return new ServiceResponse<Category>(null, $"Internal server error: {ex.Message}", ServiceStatusCodes.StatusCode.Error);
         }
     }

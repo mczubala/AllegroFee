@@ -9,47 +9,29 @@ namespace MFC.Services;
 public class CalculationService : ICalculationService
 {
     private readonly IAllegroApiService _allegroApiService;
+    private readonly IAllegroApiClient _allegroApiClient;
+    private readonly IAccessTokenProvider _accessTokenProvider;
 
-    public CalculationService(IAllegroApiService allegroApiService)
+    public CalculationService(IAllegroApiService allegroApiService, IAllegroApiClient allegroApiClient, IAccessTokenProvider accessTokenProvider)
     {
         _allegroApiService = allegroApiService;
+        _allegroApiClient = allegroApiClient;
+        _accessTokenProvider = accessTokenProvider;
     }
-
+    
     #region Public Methods 
     
-    public async Task<ServiceResponse<OfferFee>> GetCalculatedOfferFeeByIdAsync(string offerId)
-    {
-        var billingResponse = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
-        if (billingResponse.StatusCode != HttpStatusCode.OK)
-        {
-            return new ServiceResponse<OfferFee>(billingResponse.Message, ServiceStatusCodes.StatusCode.Error);
-        }
-
-        if (billingResponse.Data == null || !billingResponse.Data.Any())
-        {
-            return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", ServiceStatusCodes.StatusCode.NotFound);
-        }
-        try
-        {
-            var result = new OfferFee();
-            var fixedFee = CalculateOfferFixedFee(offerId, billingResponse.Data);
-            result.Fee = fixedFee;
-            return new ServiceResponse<OfferFee>(result);
-        }
-        catch (Exception ex)
-        {
-            return new ServiceResponse<OfferFee>(ex.Message, ServiceStatusCodes.StatusCode.Error);
-        }
-    }
     public async Task<ServiceResponse<OfferFee>> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
     {
-        var billingResponse = await _allegroApiService.GetBillingByOfferIdAsync(offerId);
+        var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
+        var billingResponse = await _allegroApiClient.GetBillingByOfferIdAsync(offerId,$"Bearer {accessToken}");
+        
         if (billingResponse.StatusCode != HttpStatusCode.OK)
         {
-            return new ServiceResponse<OfferFee>(billingResponse.Message, ServiceStatusCodes.StatusCode.Error);
+            return new ServiceResponse<OfferFee>(billingResponse.Error.Message, ServiceStatusCodes.StatusCode.Error);
         }
 
-        if (billingResponse.Data == null || !billingResponse.Data.Any())
+        if (billingResponse.Content == null)
         {
             return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", ServiceStatusCodes.StatusCode.NotFound);
         }
@@ -58,13 +40,13 @@ public class CalculationService : ICalculationService
         {
             var result = new OfferFee();
             result.OfferId = offerId;
-            var billingEntries = billingResponse.Data;
-            var billingSum = billingEntries.Sum(x => decimal.Parse(x.Value.Amount, CultureInfo.InvariantCulture));
-        
-            var totalSaleResponse = await GetCalculatedTotalOfferSaleAsync(offerId, GetListOfUniqueOrderDataID(billingEntries));
+            List<BillingEntry> billingEntries = billingResponse.Content.BillingEntries;
+            var billingSum = billingEntries.Sum(billingEntry => decimal.Parse(billingEntry.Value.Amount, CultureInfo.InvariantCulture));
+            
+            var totalSaleResponse = await GetCalculatedTotalOfferSaleAsync(offerId, GetListOfUniqueOrderDataId(billingEntries));
             if (totalSaleResponse.ResponseStatus != ServiceStatusCodes.StatusCode.Success)
                 return new ServiceResponse<OfferFee>(totalSaleResponse.Message, ServiceStatusCodes.StatusCode.Error);
-
+            
             result.Fee = billingSum / totalSaleResponse.Data;
             return new ServiceResponse<OfferFee>(result);
         }
@@ -87,7 +69,7 @@ public class CalculationService : ICalculationService
             var groupedEntries = billingEntries
                 .Where(x => x.Order != null) // exclude entries with null Order
                 .GroupBy(x => x.Order.Id);
-
+    
             // Calculate sum for each group
             var sumResults = groupedEntries.Select(group => new
             {
@@ -96,12 +78,14 @@ public class CalculationService : ICalculationService
             });
         
             // Get list of unique order ids
-            var uniqueOrderIds = GetListOfUniqueOrderDataID(billingEntries);
+            var uniqueOrderIds = GetListOfUniqueOrderDataId(billingEntries);
         
             List<Order> orders = new List<Order>();
+            var accessToken = _accessTokenProvider.GetAccessForUserTokenAsync();
             foreach (var uniqueOrderId in uniqueOrderIds)
             {
-                orders.Add(_allegroApiService.GetOrderByIdAsync(uniqueOrderId).Result); 
+                var order = _allegroApiClient.GetOrderByIdAsync(uniqueOrderId, $"Bearer {accessToken}");
+                orders.Add(order.Result.Content);
             }
         
             OfferFee productFee = new OfferFee();
@@ -111,9 +95,10 @@ public class CalculationService : ICalculationService
             {
                 var order = orders.Where(x => x.Id == sumResult.OrderId).FirstOrDefault();
                 var quantity = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
-                var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.AmountValue;
+                var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.Amount;
                 var totalFee = sumResult.TotalAmount;
                 var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
+    
                 percentageFees.Add(percentFee);
                 result = percentageFees.Average();;   
             }
@@ -123,9 +108,9 @@ public class CalculationService : ICalculationService
             Console.WriteLine(e);
             throw;
         }
-
+    
         return result;
-
+    
     }
     private async Task<ServiceResponse<decimal>> GetCalculatedTotalOfferSaleAsync(string offerId, List<string> orderIds)
     {
@@ -134,18 +119,21 @@ public class CalculationService : ICalculationService
             var orders = new List<Order>();
             foreach (var orderId in orderIds)
             {
-                var order = await _allegroApiService.GetOrderByIdAsync(orderId);
-                if (order == null)
+                //var order = await _allegroApiService.GetOrderByIdAsync(orderId);
+                var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
+                var order = await _allegroApiClient.GetOrderByIdAsync(orderId, $"Bearer {accessToken}");
+                
+                if (order.StatusCode == HttpStatusCode.NotFound)
                 {
                     return new ServiceResponse<decimal>($"Order with ID {orderId} not found.", ServiceStatusCodes.StatusCode.NotFound);
                 }
-                orders.Add(order);
+                orders.Add(order.Content);
             }
 
             // Calculate total sale amount for the specific offerId
             decimal result = orders.SelectMany(order => order.LineItems)
                 .Where(item => item.Offer.Id == offerId)
-                .Sum(item => decimal.Parse(item.Price.AmountValue, CultureInfo.InvariantCulture) * item.Quantity);
+                .Sum(item => decimal.Parse(item.Price.Amount, CultureInfo.InvariantCulture) * item.Quantity);
 
             return new ServiceResponse<decimal>(result);
         }
@@ -154,7 +142,7 @@ public class CalculationService : ICalculationService
             return new ServiceResponse<decimal>($"Internal server error: {ex.Message}", ServiceStatusCodes.StatusCode.Error); 
         }
     }
-    private static List<string> GetListOfUniqueOrderDataID(List<BillingEntry> billingEntries)
+    private static List<string> GetListOfUniqueOrderDataId(List<BillingEntry> billingEntries)
     {
         try
         {
