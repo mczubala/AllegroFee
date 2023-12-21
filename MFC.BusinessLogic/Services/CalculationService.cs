@@ -48,7 +48,7 @@ public class CalculationService : ICalculationService
             if (totalSaleResponse.Data == 0)
                 return new ServiceResponse<OfferFee>($"Total sale amount for the offer id {offerId} is 0.", ServiceStatusCodes.StatusCode.Error);
             
-            result.Fee = billingSum / totalSaleResponse.Data;
+            result.Fee = Math.Abs(billingSum / totalSaleResponse.Data);
             return new ServiceResponse<OfferFee>(result);
         }
         catch (Exception e)
