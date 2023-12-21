@@ -8,13 +8,11 @@ namespace MFC.Services;
 
 public class CalculationService : ICalculationService
 {
-    private readonly IAllegroApiService _allegroApiService;
     private readonly IAllegroApiClient _allegroApiClient;
     private readonly IAccessTokenProvider _accessTokenProvider;
 
-    public CalculationService(IAllegroApiService allegroApiService, IAllegroApiClient allegroApiClient, IAccessTokenProvider accessTokenProvider)
+    public CalculationService(IAllegroApiClient allegroApiClient, IAccessTokenProvider accessTokenProvider)
     {
-        _allegroApiService = allegroApiService;
         _allegroApiClient = allegroApiClient;
         _accessTokenProvider = accessTokenProvider;
     }
@@ -41,11 +39,14 @@ public class CalculationService : ICalculationService
             var result = new OfferFee();
             result.OfferId = offerId;
             List<BillingEntry> billingEntries = billingResponse.Content.BillingEntries;
-            var billingSum = billingEntries.Sum(billingEntry => decimal.Parse(billingEntry.Value.Amount, CultureInfo.InvariantCulture));
+            var billingSum = billingEntries.Sum(billingEntry => billingEntry.Value.Amount);
             
             var totalSaleResponse = await GetCalculatedTotalOfferSaleAsync(offerId, GetListOfUniqueOrderDataId(billingEntries));
             if (totalSaleResponse.ResponseStatus != ServiceStatusCodes.StatusCode.Success)
                 return new ServiceResponse<OfferFee>(totalSaleResponse.Message, ServiceStatusCodes.StatusCode.Error);
+            
+            if (totalSaleResponse.Data == 0)
+                return new ServiceResponse<OfferFee>($"Total sale amount for the offer id {offerId} is 0.", ServiceStatusCodes.StatusCode.Error);
             
             result.Fee = billingSum / totalSaleResponse.Data;
             return new ServiceResponse<OfferFee>(result);
@@ -74,7 +75,8 @@ public class CalculationService : ICalculationService
             var sumResults = groupedEntries.Select(group => new
             {
                 OrderId = group.Key,
-                TotalAmount = group.Sum(item => decimal.Parse(item.Value.Amount, CultureInfo.InvariantCulture))
+                //TotalAmount = group.Sum(item => decimal.Parse(item.Value.Amount, CultureInfo.InvariantCulture))
+                TotalAmount = group.Sum(item => item.Value.Amount)
             });
         
             // Get list of unique order ids
@@ -97,7 +99,7 @@ public class CalculationService : ICalculationService
                 var quantity = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Quantity;
                 var price = order.LineItems.Where(x => x.Offer.Id == offerId).FirstOrDefault().Price.Amount;
                 var totalFee = sumResult.TotalAmount;
-                var percentFee = totalFee / (quantity * decimal.Parse(price, CultureInfo.InvariantCulture));
+                var percentFee = totalFee / (quantity * price);
     
                 percentageFees.Add(percentFee);
                 result = percentageFees.Average();;   
@@ -133,7 +135,7 @@ public class CalculationService : ICalculationService
             // Calculate total sale amount for the specific offerId
             decimal result = orders.SelectMany(order => order.LineItems)
                 .Where(item => item.Offer.Id == offerId)
-                .Sum(item => decimal.Parse(item.Price.Amount, CultureInfo.InvariantCulture) * item.Quantity);
+                .Sum(item => item.Price.Amount * item.Quantity);
 
             return new ServiceResponse<decimal>(result);
         }

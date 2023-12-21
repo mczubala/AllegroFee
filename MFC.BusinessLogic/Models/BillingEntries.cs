@@ -1,6 +1,6 @@
 namespace MFC.Models;
 
-public class BillingEtries
+public class Billings
 {
     public List<BillingEntry> BillingEntries { get; set; }
 }

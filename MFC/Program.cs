@@ -7,22 +7,30 @@ using Refit;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.CookiePolicy;
+using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add the HttpClient service
 builder.Services.AddHttpClient();
 // Add services to the container.
-// Register the access token provider with the DI container
-builder.Services.AddRefitClient<IAllegroApiClient>()
+var settings = new RefitSettings();
+settings.ContentSerializer = new NewtonsoftJsonContentSerializer(new JsonSerializerSettings
+{
+    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+});
+
+builder.Services.AddRefitClient<IAllegroApiClient>(settings)
     .ConfigureHttpClient((sp, c) =>
     {
         var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;
         c.BaseAddress = new Uri(options.AllegroApiBaseUrl);
     });
 
+
 builder.Services.Configure<AllegroApiSettings>(builder.Configuration.GetSection("AllegroApiSettings"));
 
+// Register the access token provider with the DI container
 builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;

@@ -24,12 +24,12 @@ public class Type
 
 public class Balance
 {
-    public string Amount { get; set; }
+    public decimal Amount { get; set; }
     public string Currency { get; set; }
 }
 
 public class Value
 {
-    public string Amount { get; set; }
+    public decimal Amount { get; set; }
     public string Currency { get; set; }
 }

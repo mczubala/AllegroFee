@@ -37,6 +37,6 @@ public class Summary
 }
 public class TotalToPay
 {
-    public string Amount { get; set; }
+    public decimal Amount { get; set; }
     public string Currency { get; set; }
 }
