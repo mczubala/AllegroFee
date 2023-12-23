@@ -1,3 +1,4 @@
+using Azure.Identity;
 using FluentValidation.AspNetCore;
 using MFC.Configurations;
 using MFC.Interfaces;
@@ -14,6 +15,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add the HttpClient service
 builder.Services.AddHttpClient();
 // Add services to the container.
+// builder.Configuration.AddAzureKeyVault(
+//     new Uri(builder.Configuration["https://mfcwebapi.vault.azure.net/"]),
+//     new DefaultAzureCredential());
+
 var settings = new RefitSettings();
 settings.ContentSerializer = new NewtonsoftJsonContentSerializer(new JsonSerializerSettings
 {
@@ -79,11 +84,11 @@ app.UseCookiePolicy();
 app.UseAuthentication();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
+// if (app.Environment.IsDevelopment())
+// {
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+// }
 
 app.UseCors(builder => builder
     .AllowAnyOrigin()
