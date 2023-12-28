@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net;
 using AutoFixture;
+using MFC.DataAccessLayer.Entities;
+using MFC.DataAccessLayer.Repository;
 using MFC.Interfaces;
 using MFC.Models;
 using MFC.Responses;
@@ -16,12 +18,14 @@ public class CalculationServiceUnitTests
 {
     private readonly Mock<IAllegroApiClient> _mockAllegroApiClient;
     private readonly Mock<IAccessTokenProvider> _mockAccessTokenProvider;
+    private readonly Mock<IMfcDbRepository> _mockOfferFeesRepository;
     private readonly Fixture _fixture;
 
     public CalculationServiceUnitTests()
     {
         _mockAllegroApiClient = new Mock<IAllegroApiClient>();
         _mockAccessTokenProvider = new Mock<IAccessTokenProvider>();
+        _mockOfferFeesRepository = new Mock<IMfcDbRepository>();
         _fixture = new Fixture();
     }
     
@@ -73,10 +77,15 @@ public class CalculationServiceUnitTests
             .Setup(x => x.GetAccessForUserTokenAsync())
             .ReturnsAsync(fakeAccessToken);
        
+        _mockOfferFeesRepository
+            .Setup(x => x.AddOfferFee(It.IsAny<OfferFee>()))
+            .Returns(Task.CompletedTask);
+        
         // Mock the GetCalculatedTotalOfferSaleAsync method to return the fake total sale
         var service = new CalculationService(
             _mockAllegroApiClient.Object,
-            _mockAccessTokenProvider.Object);
+            _mockAccessTokenProvider.Object
+            ,_mockOfferFeesRepository.Object);
         
         var result = await service.GetCalculatedTotalOfferFeeByIdAsync(testOfferId);
         

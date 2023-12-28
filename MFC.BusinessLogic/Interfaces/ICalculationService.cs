@@ -5,6 +5,6 @@ namespace MFC.Interfaces
 {
     public interface ICalculationService
     {
-        Task<ServiceResponse<OfferFee>> GetCalculatedTotalOfferFeeByIdAsync(string offerId);
+        Task<ServiceResponse<OfferFeeDto>> GetCalculatedTotalOfferFeeByIdAsync(string offerId);
     }
 }

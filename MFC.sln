@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MFC", "MFC\MFC.csproj", "{B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MFC.BusinessLogic", "MFC.BusinessLogic\MFC.BusinessLogic.csproj", "{AD7275D0-0358-4590-9F06-5C0464CE8084}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MFC.DataAccessLayer", "MFC.DataAccessLayer\MFC.DataAccessLayer.csproj", "{716FEC3F-6EE8-4CDD-8B0E-9169C5B0FAF8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{AD7275D0-0358-4590-9F06-5C0464CE8084}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AD7275D0-0358-4590-9F06-5C0464CE8084}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AD7275D0-0358-4590-9F06-5C0464CE8084}.Release|Any CPU.Build.0 = Release|Any CPU
+		{716FEC3F-6EE8-4CDD-8B0E-9169C5B0FAF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{716FEC3F-6EE8-4CDD-8B0E-9169C5B0FAF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{716FEC3F-6EE8-4CDD-8B0E-9169C5B0FAF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{716FEC3F-6EE8-4CDD-8B0E-9169C5B0FAF8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

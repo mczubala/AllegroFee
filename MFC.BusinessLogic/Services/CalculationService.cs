@@ -1,5 +1,6 @@
-using System.Globalization;
 using System.Net;
+using MFC.DataAccessLayer.Entities;
+using MFC.DataAccessLayer.Repository;
 using MFC.Interfaces;
 using MFC.Models;
 using MFC.Responses;
@@ -10,50 +11,61 @@ public class CalculationService : ICalculationService
 {
     private readonly IAllegroApiClient _allegroApiClient;
     private readonly IAccessTokenProvider _accessTokenProvider;
-
-    public CalculationService(IAllegroApiClient allegroApiClient, IAccessTokenProvider accessTokenProvider)
+    private readonly IMfcDbRepository _mfcDbRepository;
+    
+    public CalculationService(IAllegroApiClient allegroApiClient, IAccessTokenProvider accessTokenProvider, IMfcDbRepository mfcDbRepository)
     {
         _allegroApiClient = allegroApiClient;
         _accessTokenProvider = accessTokenProvider;
+        _mfcDbRepository = mfcDbRepository;
     }
     
     #region Public Methods 
     
-    public async Task<ServiceResponse<OfferFee>> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
+    public async Task<ServiceResponse<OfferFeeDto>> GetCalculatedTotalOfferFeeByIdAsync(string offerId)
     {
         var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
         var billingResponse = await _allegroApiClient.GetBillingByOfferIdAsync(offerId,$"Bearer {accessToken}");
         
         if (billingResponse.StatusCode != HttpStatusCode.OK)
         {
-            return new ServiceResponse<OfferFee>(billingResponse.Error.Message, ServiceStatusCodes.StatusCode.Error);
+            return new ServiceResponse<OfferFeeDto>(billingResponse.Error.Message, ServiceStatusCodes.StatusCode.Error);
         }
 
         if (billingResponse.Content == null)
         {
-            return new ServiceResponse<OfferFee>($"Billing entries not found for the offer id {offerId}.", ServiceStatusCodes.StatusCode.NotFound);
+            return new ServiceResponse<OfferFeeDto>($"Billing entries not found for the offer id {offerId}.", ServiceStatusCodes.StatusCode.NotFound);
         }
         
         try
         {
-            var result = new OfferFee();
+            var result = new OfferFeeDto();
             result.OfferId = offerId;
             List<BillingEntry> billingEntries = billingResponse.Content.BillingEntries;
             var billingSum = billingEntries.Sum(billingEntry => billingEntry.Value.Amount);
             
             var totalSaleResponse = await GetCalculatedTotalOfferSaleAsync(offerId, GetListOfUniqueOrderDataId(billingEntries));
             if (totalSaleResponse.ResponseStatus != ServiceStatusCodes.StatusCode.Success)
-                return new ServiceResponse<OfferFee>(totalSaleResponse.Message, ServiceStatusCodes.StatusCode.Error);
+                return new ServiceResponse<OfferFeeDto>(totalSaleResponse.Message, ServiceStatusCodes.StatusCode.Error);
             
             if (totalSaleResponse.Data == 0)
-                return new ServiceResponse<OfferFee>($"Total sale amount for the offer id {offerId} is 0.", ServiceStatusCodes.StatusCode.Error);
+                return new ServiceResponse<OfferFeeDto>($"Total sale amount for the offer id {offerId} is 0.", ServiceStatusCodes.StatusCode.Error);
             
-            result.Fee = Math.Abs(billingSum / totalSaleResponse.Data);
-            return new ServiceResponse<OfferFee>(result);
+            result.FeePercent = Math.Abs(billingSum / totalSaleResponse.Data);
+
+
+            var offerFee = new OfferFee(result.OfferId, result.FeePercent);
+            _mfcDbRepository.AddOfferFee(offerFee)
+                .ContinueWith(async task =>
+                {
+                    await _mfcDbRepository.SaveChangesAsync();
+                });
+            
+            return new ServiceResponse<OfferFeeDto>(result);
         }
         catch (Exception e)
         {
-            return new ServiceResponse<OfferFee>(e.Message, ServiceStatusCodes.StatusCode.Error);
+            return new ServiceResponse<OfferFeeDto>(e.Message, ServiceStatusCodes.StatusCode.Error);
         }
     }
 
@@ -90,7 +102,7 @@ public class CalculationService : ICalculationService
                 orders.Add(order.Result.Content);
             }
         
-            OfferFee productFee = new OfferFee();
+            OfferFeeDto productFee = new OfferFeeDto();
             productFee.OfferId = offerId;
             var percentageFees = new List<decimal>();
             foreach (var sumResult in sumResults)

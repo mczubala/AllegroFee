@@ -1,6 +1,8 @@
 using Azure.Identity;
 using FluentValidation.AspNetCore;
 using MFC.Configurations;
+using MFC.DataAccessLayer;
+using MFC.DataAccessLayer.Repository;
 using MFC.Interfaces;
 using MFC.Services;
 using Microsoft.Extensions.Options;
@@ -8,6 +10,7 @@ using Refit;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.CookiePolicy;
+using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,8 +69,12 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
+builder.Services.AddScoped<IMfcDbRepository, MfcDbRepository>();
 builder.Services.AddTransient<ICategoryService, CategoryService>();
 builder.Services.AddTransient<ICalculationService, CalculationService>();
+
+builder.Services.AddDbContext<MfcDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("AZURE_SQL_CONNECTIONSTRING")));
 
 builder.Services.AddControllers();
 
