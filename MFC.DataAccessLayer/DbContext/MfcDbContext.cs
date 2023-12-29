@@ -11,5 +11,5 @@ public class MfcDbContext: DbContext
     }
     
     public DbSet<OfferFee> OfferFees { get; set; }
-
+    public DbSet<AllegroAccessToken> AllegroAccessTokens { get; set; }
 }

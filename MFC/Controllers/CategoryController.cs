@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MFC.Controllers
 {
     [ApiController]
+    // Authorize attribute is used to protect the controller from unauthorized access
     [Authorize]
     [Route("[controller]")]
     public class CategoryController : ControllerBase
@@ -21,9 +22,9 @@ namespace MFC.Controllers
         #region Action Methods
 
         [HttpGet("{categoryId:int}")]
-        public async Task<IActionResult> GetCategoryById(string categoryId)
+        public async Task<IActionResult> GetCategoryById(int categoryId)
         {
-            var response = await _categoryService.GetCategoryAsync(categoryId);
+            var response = await _categoryService.GetCategoryAsync(categoryId.ToString());
             if (response.ResponseStatus == ServiceStatusCodes.StatusCode.Success)
             {
                 return Ok(response.Data);

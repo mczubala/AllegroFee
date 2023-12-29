@@ -25,4 +25,33 @@ public class MfcDbRepository : IMfcDbRepository
     {
         _context.OfferFees.Add(newOfferFee);
     }
+
+    #region AllegroAccessToken
+
+    public async Task<AllegroAccessToken> GetAllegroAccessTokenByClientIdAsync(string clientId)
+    {
+        return await _context.AllegroAccessTokens.FirstOrDefaultAsync(accessToken => accessToken.ClientId == clientId);
+    }
+    
+    public Task AddAllegroAccessToken(AllegroAccessToken newAllegroAccessToken)
+    {
+        if(_context.AllegroAccessTokens.Any(accessToken => accessToken.AccessToken == newAllegroAccessToken.AccessToken))
+        {
+             _context.AllegroAccessTokens.Update(newAllegroAccessToken);
+        }
+        else
+        {
+            _context.AllegroAccessTokens.Add(newAllegroAccessToken);
+        }
+
+        return Task.CompletedTask;
+    }
+    
+    public async Task UpdateAllegroAccessTokenAsync(AllegroAccessToken newAllegroAccessToken)
+    {
+        _context.AllegroAccessTokens.Update(newAllegroAccessToken);
+    }
+
+    #endregion
+    
 }

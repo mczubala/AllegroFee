@@ -55,11 +55,8 @@ public class CalculationService : ICalculationService
 
 
             var offerFee = new OfferFee(result.OfferId, result.FeePercent);
-            _mfcDbRepository.AddOfferFee(offerFee)
-                .ContinueWith(async task =>
-                {
-                    await _mfcDbRepository.SaveChangesAsync();
-                });
+            _mfcDbRepository.AddOfferFee(offerFee);
+            await _mfcDbRepository.SaveChangesAsync();
             
             return new ServiceResponse<OfferFeeDto>(result);
         }
@@ -131,10 +128,10 @@ public class CalculationService : ICalculationService
         try
         {
             var orders = new List<Order>();
+            var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
             foreach (var orderId in orderIds)
             {
                 //var order = await _allegroApiService.GetOrderByIdAsync(orderId);
-                var accessToken = await _accessTokenProvider.GetAccessForUserTokenAsync();
                 var order = await _allegroApiClient.GetOrderByIdAsync(orderId, $"Bearer {accessToken}");
                 
                 if (order.StatusCode == HttpStatusCode.NotFound)

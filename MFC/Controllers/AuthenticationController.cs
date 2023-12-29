@@ -10,7 +10,7 @@ namespace MFC.Controllers;
 public class AuthenticationController : ControllerBase
 {
     [HttpGet("login")]
-    public ChallengeResult Login()
+    public ChallengeResult LoginWithGoogle()
     {
         string redirectUri = "http://localhost:5029/signin-google";
         //var properties = new AuthenticationProperties { RedirectUri = redirectUri };

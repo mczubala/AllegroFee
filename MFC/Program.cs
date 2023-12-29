@@ -18,9 +18,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add the HttpClient service
 builder.Services.AddHttpClient();
 // Add services to the container.
-// builder.Configuration.AddAzureKeyVault(
-//     new Uri(builder.Configuration["https://mfcwebapi.vault.azure.net/"]),
-//     new DefaultAzureCredential());
 
 var settings = new RefitSettings();
 settings.ContentSerializer = new NewtonsoftJsonContentSerializer(new JsonSerializerSettings
@@ -38,13 +35,6 @@ builder.Services.AddRefitClient<IAllegroApiClient>(settings)
 
 builder.Services.Configure<AllegroApiSettings>(builder.Configuration.GetSection("AllegroApiSettings"));
 
-// Register the access token provider with the DI container
-builder.Services.AddSingleton<IAccessTokenProvider>(sp =>
-{
-    var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;
-    var httpClient = sp.GetRequiredService<HttpClient>();
-    return new AccessTokenProvider(httpClient, options.ClientId, options.ClientSecret, options.TokenUrl, options.AuthorizationEndpoint);
-});
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
     options.MinimumSameSitePolicy = SameSiteMode.Lax; 
@@ -68,8 +58,15 @@ builder.Services.AddAuthentication(options =>
         options.ClientSecret = googleSettings.ClientSecret;
     });
 
-builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
 builder.Services.AddScoped<IMfcDbRepository, MfcDbRepository>();
+builder.Services.AddScoped<IAccessTokenProvider>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AllegroApiSettings>>().Value;
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    return new AccessTokenProvider(httpClient, options.ClientId, options.ClientSecret, options.TokenUrl, options.AuthorizationEndpoint, sp.GetRequiredService<IMfcDbRepository>());
+});
+
+builder.Services.AddScoped<IAllegroApiService, AllegroApiService>();
 builder.Services.AddTransient<ICategoryService, CategoryService>();
 builder.Services.AddTransient<ICalculationService, CalculationService>();
 
